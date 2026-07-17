@@ -1,0 +1,23 @@
+# Build output
+**/[Bb]in/
+**/[Oo]bj/
+artifacts/
+*.nupkg
+*.snupkg
+
+# Test output
+TestResults/
+*.trx
+
+# IDE and editor files
+.vs/
+.vscode/
+.idea/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Operating-system files
+.DS_Store
+Thumbs.db

@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <AssemblyName>ScreenshotScout</AssemblyName>
+    <RootNamespace>ScreenshotScout</RootNamespace>
+    <PackageId>ScreenshotScout</PackageId>
+    <VersionPrefix>0.1.0</VersionPrefix>
+    <VersionSuffix>rc.1</VersionSuffix>
+    <Title>Screenshot Scout .NET SDK</Title>
+    <Authors>Oleksii Velykyi</Authors>
+    <Company>Screenshot Scout</Company>
+    <Copyright>Copyright (c) 2026 Oleksii Velykyi</Copyright>
+    <Description>Official .NET SDK for the Screenshot Scout capture API.</Description>
+    <PackageTags>screenshot;screenshot-api;website-screenshot;pdf</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageProjectUrl>https://screenshotscout.com</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/screenshotscout/screenshotscout-dotnet</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <IsPackable>true</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" Link="README.md" />
+    <None Include="..\..\LICENSE" Pack="true" PackagePath="\" Link="LICENSE" />
+  </ItemGroup>
+</Project>
