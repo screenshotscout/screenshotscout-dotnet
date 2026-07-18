@@ -320,17 +320,54 @@ public sealed class ScreenshotScoutClientTests
     }
 
     [Fact]
-    public void MethodIsClosedAndSeparateWhileServiceValuesRemainOpen()
+    public void MethodIsClosedWhileServiceValuesUseSafeExplicitConversions()
     {
         Assert.Equal([CaptureHttpMethod.Post, CaptureHttpMethod.Get], Enum.GetValues<CaptureHttpMethod>());
         Assert.Null(typeof(CaptureOptions).GetProperty("Method"));
 
-        CaptureFormat futureFormat = "future-format";
-        var options = new CaptureOptions { Format = "future-format" };
+        var futureFormat = (CaptureFormat)"future-format";
+        var options = new CaptureOptions { Format = (CaptureFormat)"future-format" };
         Assert.Equal("future-format", futureFormat.Value);
         Assert.Equal("future-format", options.Format?.Value);
         Assert.Equal("webp", CaptureFormat.Webp.Value);
         Assert.Equal("json", CaptureResponseType.Json.Value);
+
+        Type[] openValueTypes =
+        [
+            typeof(CaptureFormat),
+            typeof(CaptureResponseType),
+            typeof(CaptureWaitUntil),
+            typeof(CaptureMediaType),
+            typeof(CaptureColorScheme),
+            typeof(CaptureImageMode),
+            typeof(CaptureImageAnchor),
+            typeof(CapturePdfPaperFormat),
+            typeof(CaptureStorageMode),
+        ];
+        foreach (var openValueType in openValueTypes)
+        {
+            Assert.DoesNotContain(
+                openValueType.GetMethods(),
+                method => method.Name == "op_Implicit"
+                    && method.GetParameters() is [{ ParameterType: var parameterType }]
+                    && parameterType == typeof(string));
+            Assert.Contains(
+                openValueType.GetMethods(),
+                method => method.Name == "op_Explicit"
+                    && method.ReturnType == openValueType
+                    && method.GetParameters() is [{ ParameterType: var parameterType }]
+                    && parameterType == typeof(string));
+        }
+
+        var includeFormat = false;
+        var omittedOptions = new CaptureOptions
+        {
+            Format = includeFormat ? CaptureFormat.Png : null,
+        };
+        Assert.Null(omittedOptions.Format);
+
+        using var client = new ScreenshotScoutClient("key");
+        Assert.DoesNotContain("format=", client.BuildCaptureUrl("https://example.com", omittedOptions));
     }
 
     private static ScreenshotScoutClient CreateClient(string accessKey, TestTransport transport)

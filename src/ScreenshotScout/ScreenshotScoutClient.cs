@@ -23,6 +23,15 @@ public sealed class ScreenshotScoutClient : IDisposable
     private int _disposed;
 
     /// <summary>Creates a reusable client with explicit credentials and optional transport configuration.</summary>
+    /// <param name="accessKey">The required Screenshot Scout API access key.</param>
+    /// <param name="secretKey">
+    /// The optional secret key used to sign capture requests and generated capture URLs.
+    /// </param>
+    /// <param name="options">Optional HTTP transport configuration.</param>
+    /// <exception cref="ScreenshotScoutConfigurationException">
+    /// <paramref name="accessKey"/> is blank or cannot be used as a Bearer credential, or
+    /// <paramref name="secretKey"/> is blank or contains invalid Unicode text.
+    /// </exception>
     public ScreenshotScoutClient(
         string accessKey,
         string? secretKey = null,
@@ -86,6 +95,29 @@ public sealed class ScreenshotScoutClient : IDisposable
     /// Sends one POST capture request using Task-based asynchronous I/O and waits
     /// for the final inline Screenshot Scout response.
     /// </summary>
+    /// <param name="url">The absolute URL of the page to capture.</param>
+    /// <param name="options">Optional capture settings.</param>
+    /// <param name="cancellationToken">
+    /// An optional token that cancels the request. Most callers can omit it.
+    /// </param>
+    /// <returns>
+    /// A task whose result contains either binary image/PDF data or a JSON capture result,
+    /// according to <see cref="CaptureOptions.ResponseType"/>.
+    /// </returns>
+    /// <exception cref="ScreenshotScoutSerializationException">
+    /// The URL or a capture option cannot be serialized.
+    /// </exception>
+    /// <exception cref="ScreenshotScoutTransportException">
+    /// The request fails before a complete HTTP response is received.
+    /// </exception>
+    /// <exception cref="ScreenshotScoutApiException">The API returns a non-success status code.</exception>
+    /// <exception cref="ScreenshotScoutResponseDecodingException">
+    /// A successful response does not match the requested response type or contains invalid JSON.
+    /// </exception>
+    /// <exception cref="OperationCanceledException">
+    /// <paramref name="cancellationToken"/> is canceled.
+    /// </exception>
+    /// <exception cref="ObjectDisposedException">The client has been disposed.</exception>
     public Task<CaptureResponse> CaptureAsync(
         string url,
         CaptureOptions? options = null,
@@ -98,6 +130,30 @@ public sealed class ScreenshotScoutClient : IDisposable
     /// Sends one GET or POST capture request using Task-based asynchronous I/O
     /// and waits for the final inline Screenshot Scout response.
     /// </summary>
+    /// <param name="url">The absolute URL of the page to capture.</param>
+    /// <param name="options">Optional capture settings.</param>
+    /// <param name="method">The HTTP method used to send the capture request.</param>
+    /// <param name="cancellationToken">
+    /// An optional token that cancels the request. Most callers can omit it.
+    /// </param>
+    /// <returns>
+    /// A task whose result contains either binary image/PDF data or a JSON capture result,
+    /// according to <see cref="CaptureOptions.ResponseType"/>.
+    /// </returns>
+    /// <exception cref="ScreenshotScoutSerializationException">
+    /// The method, URL, or a capture option cannot be serialized.
+    /// </exception>
+    /// <exception cref="ScreenshotScoutTransportException">
+    /// The request fails before a complete HTTP response is received.
+    /// </exception>
+    /// <exception cref="ScreenshotScoutApiException">The API returns a non-success status code.</exception>
+    /// <exception cref="ScreenshotScoutResponseDecodingException">
+    /// A successful response does not match the requested response type or contains invalid JSON.
+    /// </exception>
+    /// <exception cref="OperationCanceledException">
+    /// <paramref name="cancellationToken"/> is canceled.
+    /// </exception>
+    /// <exception cref="ObjectDisposedException">The client has been disposed.</exception>
     public async Task<CaptureResponse> CaptureAsync(
         string url,
         CaptureOptions? options,
@@ -151,6 +207,16 @@ public sealed class ScreenshotScoutClient : IDisposable
     /// Builds a sensitive GET capture URL without performing any network I/O.
     /// A configured secret key signs the URL automatically.
     /// </summary>
+    /// <param name="url">The absolute URL of the page to capture.</param>
+    /// <param name="options">Optional capture settings.</param>
+    /// <returns>
+    /// A capture endpoint URL containing the access key, serialized options, and an optional signature.
+    /// Treat the returned URL as sensitive.
+    /// </returns>
+    /// <exception cref="ScreenshotScoutSerializationException">
+    /// The URL or a capture option cannot be serialized.
+    /// </exception>
+    /// <exception cref="ObjectDisposedException">The client has been disposed.</exception>
     public string BuildCaptureUrl(string url, CaptureOptions? options = null)
     {
         ThrowIfDisposed();

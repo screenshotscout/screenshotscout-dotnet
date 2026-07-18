@@ -122,7 +122,7 @@ The target URL is the required first argument. Configure the request with `Captu
 - Caching: `Cache`, `CacheTtl`, `CacheKey`
 - Storage: `StorageMode`, `StorageEndpoint`, `StorageBucket`, `StorageRegion`, `StorageObjectKey`
 
-Use the provided constants for documented service values. You can also pass a newer or custom string value:
+Use the provided constants for documented service values. For a newer or custom service value, construct the open value type explicitly:
 
 ```csharp
 var documented = CaptureFormat.Webp;

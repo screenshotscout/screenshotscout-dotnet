@@ -20,10 +20,19 @@ public sealed class RawResponse
         Body = body;
     }
 
+    /// <summary>Gets the integer HTTP status code.</summary>
     public int StatusCode { get; }
+
+    /// <summary>Gets the HTTP reason phrase, when supplied by the transport.</summary>
     public string? ReasonPhrase { get; }
+
+    /// <summary>Gets the response headers with all values retained for each header name.</summary>
     public IReadOnlyDictionary<string, IReadOnlyList<string>> Headers { get; }
+
+    /// <summary>Gets the response content type, including any parameters, when present.</summary>
     public string? ContentType { get; }
+
+    /// <summary>Gets the exact buffered response-body bytes.</summary>
     public byte[] Body { get; }
 }
 
@@ -35,6 +44,7 @@ public abstract class CaptureResponse
         RawResponse = rawResponse;
     }
 
+    /// <summary>Gets the exact buffered HTTP response.</summary>
     public RawResponse RawResponse { get; }
 }
 
@@ -55,9 +65,16 @@ public sealed class BinaryCaptureResponse : CaptureResponse
         CacheStatus = cacheStatus;
     }
 
+    /// <summary>Gets the exact screenshot or PDF response-body bytes.</summary>
     public byte[] Bytes { get; }
+
+    /// <summary>Gets the screenshot URL returned in the response headers, when present.</summary>
     public string? ScreenshotUrl { get; }
+
+    /// <summary>Gets the cached screenshot URL expiration value, when caching was requested.</summary>
     public string? ScreenshotUrlExpiresAt { get; }
+
+    /// <summary>Gets the cache status returned by Screenshot Scout, when caching was requested.</summary>
     public string? CacheStatus { get; }
 }
 
@@ -76,9 +93,16 @@ public sealed class CaptureResult
         AdditionalFields = additionalFields;
     }
 
+    /// <summary>Gets the screenshot URL, when present.</summary>
     public string? ScreenshotUrl { get; }
+
+    /// <summary>Gets the cached screenshot URL expiration value, when caching was requested.</summary>
     public string? ScreenshotUrlExpiresAt { get; }
+
+    /// <summary>Gets the cache status, when caching was requested.</summary>
     public string? CacheStatus { get; }
+
+    /// <summary>Gets unrecognized JSON result fields without transformation.</summary>
     public IReadOnlyDictionary<string, JsonElement> AdditionalFields { get; }
 
     internal static IReadOnlyDictionary<string, JsonElement> ReadOnlyFields(
@@ -97,5 +121,6 @@ public sealed class JsonCaptureResponse : CaptureResponse
         Result = result;
     }
 
+    /// <summary>Gets the decoded JSON capture result.</summary>
     public CaptureResult Result { get; }
 }
