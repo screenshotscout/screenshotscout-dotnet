@@ -33,6 +33,10 @@ public sealed class RawResponse
     public string? ContentType { get; }
 
     /// <summary>Gets the exact buffered response-body bytes.</summary>
+    /// <remarks>
+    /// Treat the returned array as read-only. For binary responses, the same buffered data is
+    /// also exposed by <see cref="BinaryCaptureResponse.Bytes"/>.
+    /// </remarks>
     public byte[] Body { get; }
 }
 
@@ -66,6 +70,10 @@ public sealed class BinaryCaptureResponse : CaptureResponse
     }
 
     /// <summary>Gets the exact screenshot or PDF response-body bytes.</summary>
+    /// <remarks>
+    /// Treat the returned array as read-only. The same buffered data is also exposed by
+    /// <see cref="CaptureResponse.RawResponse"/> through <see cref="RawResponse.Body"/>.
+    /// </remarks>
     public byte[] Bytes { get; }
 
     /// <summary>Gets the screenshot URL returned in the response headers, when present.</summary>

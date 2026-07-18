@@ -8,12 +8,12 @@ using System.Text.RegularExpressions;
 namespace ScreenshotScout;
 
 /// <summary>A reusable client for the inline Screenshot Scout capture endpoint.</summary>
-public sealed class ScreenshotScoutClient : IDisposable
+public sealed partial class ScreenshotScoutClient : IDisposable
 {
     private const string CaptureEndpoint = "https://api.screenshotscout.com/v1/capture";
-    private static readonly Regex AccessKeyPattern = new(
-        "^[A-Za-z0-9\\-._~+/]+=*\\z",
-        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    [GeneratedRegex("^[A-Za-z0-9\\-._~+/]+=*\\z", RegexOptions.CultureInvariant)]
+    private static partial Regex AccessKeyRegex();
 
     private readonly string _accessKey;
     private readonly string? _secretKey;
@@ -43,7 +43,7 @@ public sealed class ScreenshotScoutClient : IDisposable
                 "A non-blank Screenshot Scout access key is required.");
         }
 
-        if (!AccessKeyPattern.IsMatch(accessKey))
+        if (!AccessKeyRegex().IsMatch(accessKey))
         {
             throw new ScreenshotScoutConfigurationException(
                 "The Screenshot Scout access key is not a valid Bearer credential.");
