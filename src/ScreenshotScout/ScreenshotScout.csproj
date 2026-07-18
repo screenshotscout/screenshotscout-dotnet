@@ -5,7 +5,6 @@
     <RootNamespace>ScreenshotScout</RootNamespace>
     <PackageId>ScreenshotScout</PackageId>
     <VersionPrefix>0.1.0</VersionPrefix>
-    <VersionSuffix>rc.1</VersionSuffix>
     <Title>Screenshot Scout .NET SDK</Title>
     <Authors>Oleksii Velykyi</Authors>
     <Company>Screenshot Scout</Company>

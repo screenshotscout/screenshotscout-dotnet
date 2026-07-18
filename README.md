@@ -11,7 +11,7 @@ The official .NET SDK for the [Screenshot Scout](https://screenshotscout.com/) s
 Install the package from NuGet:
 
 ```shell
-dotnet add package ScreenshotScout --prerelease
+dotnet add package ScreenshotScout
 ```
 
 ## Get your API credentials
