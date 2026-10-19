@@ -4,7 +4,7 @@
     <AssemblyName>ScreenshotScout</AssemblyName>
     <RootNamespace>ScreenshotScout</RootNamespace>
     <PackageId>ScreenshotScout</PackageId>
-    <VersionPrefix>0.1.1</VersionPrefix>
+    <VersionPrefix>0.3.0</VersionPrefix>
     <Title>Screenshot Scout .NET SDK</Title>
     <Authors>Oleksii Velykyi</Authors>
     <Company>Screenshot Scout</Company>
