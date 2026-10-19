@@ -204,6 +204,9 @@ public sealed class CaptureOptions
     /// <summary>Gets or initializes the content scale factor used inside PDF pages.</summary>
     public double? PdfScale { get; init; }
 
+    /// <summary>Gets or initializes the PDF page ranges to return, such as 1-3,5.</summary>
+    public string? PdfPageRanges { get; init; }
+
     /// <summary>Gets or initializes whether identical requests may use Screenshot Scout storage caching.</summary>
     public bool? Cache { get; init; }
 

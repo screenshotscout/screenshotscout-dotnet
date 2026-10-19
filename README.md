@@ -118,7 +118,7 @@ The target URL is the required first argument. Configure the request with `Captu
 - DOM changes: `HideSelectors`, `ClickSelectors`, `ClickAllSelectors`, `InjectCss`, `InjectJs`, `BypassCsp`
 - Framing: `Selector`, `ClipX`, `ClipY`, `ClipWidth`, `ClipHeight`
 - Image output: `ImageWidth`, `ImageHeight`, `ImageMode`, `ImageAnchor`, `ImageAllowUpscale`, `ImageBackground`, `ImageQuality`
-- PDF: `PdfPaperFormat`, `PdfLandscape`, `PdfPrintBackground`, `PdfMargin`, `PdfMarginTop`, `PdfMarginRight`, `PdfMarginBottom`, `PdfMarginLeft`, `PdfScale`
+- PDF: `PdfPaperFormat`, `PdfLandscape`, `PdfPrintBackground`, `PdfMargin`, `PdfMarginTop`, `PdfMarginRight`, `PdfMarginBottom`, `PdfMarginLeft`, `PdfScale`, `PdfPageRanges`
 - Caching: `Cache`, `CacheTtl`, `CacheKey`
 - Storage: `StorageMode`, `StorageEndpoint`, `StorageBucket`, `StorageRegion`, `StorageObjectKey`
 

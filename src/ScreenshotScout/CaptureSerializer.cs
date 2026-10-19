@@ -207,6 +207,7 @@ internal static class CaptureSerializer
         serializer.AppendString("PdfMarginBottom", "pdf_margin_bottom", options.PdfMarginBottom);
         serializer.AppendString("PdfMarginLeft", "pdf_margin_left", options.PdfMarginLeft);
         serializer.AppendDouble("PdfScale", "pdf_scale", options.PdfScale);
+        serializer.AppendString("PdfPageRanges", "pdf_page_ranges", options.PdfPageRanges);
         serializer.AppendBool("cache", options.Cache);
         serializer.AppendInt("CacheTtl", "cache_ttl", options.CacheTtl);
         serializer.AppendString("CacheKey", "cache_key", options.CacheKey);

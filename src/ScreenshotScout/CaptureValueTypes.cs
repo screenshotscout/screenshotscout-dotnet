@@ -240,8 +240,11 @@ public readonly record struct CapturePdfPaperFormat(string Value)
     /// <summary>Gets the A4 paper format.</summary>
     public static CapturePdfPaperFormat A4 { get; } = new("a4");
 
-    /// <summary>Gets the content-sized PDF format.</summary>
-    public static CapturePdfPaperFormat Content { get; } = new("content");
+    /// <summary>Gets the A5 paper format.</summary>
+    public static CapturePdfPaperFormat A5 { get; } = new("a5");
+
+    /// <summary>Gets the A6 paper format.</summary>
+    public static CapturePdfPaperFormat A6 { get; } = new("a6");
 
     /// <summary>Gets the legal paper format.</summary>
     public static CapturePdfPaperFormat Legal { get; } = new("legal");
