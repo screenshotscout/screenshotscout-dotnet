@@ -6,10 +6,7 @@ if (string.IsNullOrEmpty(accessKey))
     throw new InvalidOperationException("Set SCREENSHOTSCOUT_ACCESS_KEY first.");
 }
 
-var secretKey = Environment.GetEnvironmentVariable("SCREENSHOTSCOUT_SECRET_KEY");
-using var client = new ScreenshotScoutClient(
-    accessKey,
-    string.IsNullOrEmpty(secretKey) ? null : secretKey);
+using var client = new ScreenshotScoutClient(accessKey);
 
 var response = await client.CaptureAsync(
     "https://example.com",

@@ -1,5 +1,4 @@
 using System.Text;
-using System.Text.Json;
 
 using Xunit;
 
@@ -8,7 +7,7 @@ namespace ScreenshotScout.Tests;
 public sealed class ResponseAndFailureTests
 {
     [Fact]
-    public async Task GetPostAndGeneratedUrlSigningMatchTheApiAlgorithm()
+    public async Task GetAndGeneratedUrlSigningMatchTheApiAlgorithm()
     {
         using var transport = new TestTransport((_, _) => Task.FromResult(TestTransport.Response(
             200,
@@ -31,30 +30,52 @@ public sealed class ResponseAndFailureTests
             Headers = ["X-Test:one", "X-Test:two"],
         };
         const string expectedSignature =
-            "0c4928ba691575903f27b911b8ea1a536604ca070d60d886e10c127c05e236fc";
+            "6419f2ac8c0440f1e341b547630606c9dc74dacfbb2df8e122fc9ae26831d893";
 
         _ = await client.CaptureAsync(
             targetUrl,
             options,
             CaptureHttpMethod.Get,
             TestContext.Current.CancellationToken);
-        _ = await client.CaptureAsync(
-            targetUrl,
-            options,
-            CaptureHttpMethod.Post,
-            TestContext.Current.CancellationToken);
         var builtUrl = client.BuildCaptureUrl(targetUrl, options);
 
-        Assert.Equal(2, transport.Requests.Count);
-        Assert.Equal(expectedSignature, QueryValue(transport.Requests[0].Url, "signature"));
-        using var postDocument = JsonDocument.Parse(transport.Requests[1].Body);
-        Assert.Equal(expectedSignature, postDocument.RootElement.GetProperty("signature").GetString());
+        var request = Assert.Single(transport.Requests);
+        Assert.Equal(expectedSignature, QueryValue(request.Url, "signature"));
         Assert.Equal(expectedSignature, QueryValue(builtUrl, "signature"));
         Assert.Equal("ak_test", QueryValue(builtUrl, "access_key"));
         Assert.DoesNotContain("sk_test", builtUrl, StringComparison.Ordinal);
-        Assert.DoesNotContain("access_key=", transport.Requests[0].Url, StringComparison.Ordinal);
-        Assert.False(postDocument.RootElement.TryGetProperty("access_key", out _));
-        Assert.All(transport.Requests, request => Assert.Equal("Bearer ak_test", request.Authorization));
+        Assert.DoesNotContain("access_key=", request.Url, StringComparison.Ordinal);
+        Assert.Equal("Bearer ak_test", request.Authorization);
+    }
+
+    [Fact]
+    public async Task ClientWithSecretKeyRefusesPostWithoutCallingTheTransport()
+    {
+        using var transport = new TestTransport();
+        using var client = new ScreenshotScoutClient(
+            "ak_test",
+            "sk_test",
+            new ScreenshotScoutClientOptions
+            {
+                HttpClient = transport.Client,
+            });
+        const string expectedMessage =
+            "POST requests can't be signed. This client has a secret key: send this capture with method GET, or use a client without a secret key and an API key that doesn't require signed requests.";
+
+        var defaultMethodError = await Assert.ThrowsAsync<ScreenshotScoutConfigurationException>(
+            () => client.CaptureAsync(
+                "https://example.com",
+                cancellationToken: TestContext.Current.CancellationToken));
+        var postError = await Assert.ThrowsAsync<ScreenshotScoutConfigurationException>(
+            () => client.CaptureAsync(
+                "https://example.com",
+                null,
+                CaptureHttpMethod.Post,
+                TestContext.Current.CancellationToken));
+
+        Assert.Equal(expectedMessage, defaultMethodError.Message);
+        Assert.Equal(expectedMessage, postError.Message);
+        Assert.Empty(transport.Requests);
     }
 
     [Fact]

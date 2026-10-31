@@ -25,7 +25,8 @@ public sealed partial class ScreenshotScoutClient : IDisposable
     /// <summary>Creates a reusable client with explicit credentials and optional transport configuration.</summary>
     /// <param name="accessKey">The required Screenshot Scout API access key.</param>
     /// <param name="secretKey">
-    /// The optional secret key used to sign capture requests and generated capture URLs.
+    /// The optional secret key used to sign GET capture requests and generated capture URLs.
+    /// POST requests can't be signed, so a client with a secret key refuses them.
     /// </param>
     /// <param name="options">Optional HTTP transport configuration.</param>
     /// <exception cref="ScreenshotScoutConfigurationException">
@@ -93,7 +94,8 @@ public sealed partial class ScreenshotScoutClient : IDisposable
 
     /// <summary>
     /// Sends one POST capture request using Task-based asynchronous I/O and waits
-    /// for the final inline Screenshot Scout response.
+    /// for the final inline Screenshot Scout response. POST requests can't be signed,
+    /// so a client with a secret key refuses them.
     /// </summary>
     /// <param name="url">The absolute URL of the page to capture.</param>
     /// <param name="options">Optional capture settings.</param>
@@ -104,6 +106,9 @@ public sealed partial class ScreenshotScoutClient : IDisposable
     /// A task whose result contains either binary image/PDF data or a JSON capture result,
     /// according to <see cref="CaptureOptions.ResponseType"/>.
     /// </returns>
+    /// <exception cref="ScreenshotScoutConfigurationException">
+    /// The client has a secret key. Send the capture with <see cref="CaptureHttpMethod.Get"/> instead.
+    /// </exception>
     /// <exception cref="ScreenshotScoutSerializationException">
     /// The URL or a capture option cannot be serialized.
     /// </exception>
@@ -129,6 +134,7 @@ public sealed partial class ScreenshotScoutClient : IDisposable
     /// <summary>
     /// Sends one GET or POST capture request using Task-based asynchronous I/O
     /// and waits for the final inline Screenshot Scout response.
+    /// A configured secret key signs GET requests automatically; POST requests can't be signed.
     /// </summary>
     /// <param name="url">The absolute URL of the page to capture.</param>
     /// <param name="options">Optional capture settings.</param>
@@ -140,6 +146,9 @@ public sealed partial class ScreenshotScoutClient : IDisposable
     /// A task whose result contains either binary image/PDF data or a JSON capture result,
     /// according to <see cref="CaptureOptions.ResponseType"/>.
     /// </returns>
+    /// <exception cref="ScreenshotScoutConfigurationException">
+    /// <paramref name="method"/> is <see cref="CaptureHttpMethod.Post"/> and the client has a secret key.
+    /// </exception>
     /// <exception cref="ScreenshotScoutSerializationException">
     /// The method, URL, or a capture option cannot be serialized.
     /// </exception>
@@ -163,6 +172,13 @@ public sealed partial class ScreenshotScoutClient : IDisposable
         ThrowIfDisposed();
         var serialized = CaptureSerializer.Serialize(url, options);
         ValidateMethod(method);
+        if (_secretKey is not null && method == CaptureHttpMethod.Post)
+        {
+            throw new ScreenshotScoutConfigurationException(
+                "POST requests can't be signed. This client has a secret key: send this capture with method GET, "
+                + "or use a client without a secret key and an API key that doesn't require signed requests.");
+        }
+
         var expectedKind = GetExpectedResponseKind(options);
         cancellationToken.ThrowIfCancellationRequested();
         var signature = CreateSignature(serialized.Pairs);
@@ -289,13 +305,7 @@ public sealed partial class ScreenshotScoutClient : IDisposable
             else
             {
                 requestUrl = CaptureEndpoint;
-                var body = new Dictionary<string, object>(serialized.Body, StringComparer.Ordinal);
-                if (signature is not null)
-                {
-                    body["signature"] = signature;
-                }
-
-                content = new ByteArrayContent(CaptureSerializer.SerializeJsonBody(body));
+                content = new ByteArrayContent(CaptureSerializer.SerializeJsonBody(serialized.Body));
                 content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
             }
 

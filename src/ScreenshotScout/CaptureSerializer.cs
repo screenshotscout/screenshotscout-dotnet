@@ -82,9 +82,9 @@ internal static class CaptureSerializer
             }
 
             first = false;
-            builder.Append(WireFormatting.FormEncode(pair.Name));
+            builder.Append(WireFormatting.PercentEncode(pair.Name));
             builder.Append('=');
-            builder.Append(WireFormatting.FormEncode(pair.Value));
+            builder.Append(WireFormatting.PercentEncode(pair.Value));
         }
 
         return builder.ToString();
@@ -352,7 +352,7 @@ internal static class WireFormatting
         }
     }
 
-    internal static string FormEncode(string value)
+    internal static string PercentEncode(string value)
     {
         var bytes = StrictUtf8.GetBytes(value);
         var builder = new StringBuilder(bytes.Length);
@@ -362,13 +362,9 @@ internal static class WireFormatting
             if ((octet >= (byte)'A' && octet <= (byte)'Z')
                 || (octet >= (byte)'a' && octet <= (byte)'z')
                 || (octet >= (byte)'0' && octet <= (byte)'9')
-                || octet is (byte)'*' or (byte)'-' or (byte)'.' or (byte)'_')
+                || octet is (byte)'-' or (byte)'.' or (byte)'_' or (byte)'~')
             {
                 builder.Append((char)octet);
-            }
-            else if (octet == (byte)' ')
-            {
-                builder.Append('+');
             }
             else
             {

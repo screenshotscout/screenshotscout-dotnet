@@ -257,7 +257,7 @@ public sealed class ScreenshotScoutClientTests
         Assert.Null(request.ContentType);
         Assert.Empty(request.Body);
         Assert.Equal(
-            "https://api.screenshotscout.com/v1/capture?url=https%3A%2F%2Fexample.com%2Fa+path&cookies=a%3D1&cookies=a%3D1&headers=X-Test%3Aone&headers=X-Test%3Aone&delay=0&full_page=false&cache_key=",
+            "https://api.screenshotscout.com/v1/capture?url=https%3A%2F%2Fexample.com%2Fa%20path&cookies=a%3D1&cookies=a%3D1&headers=X-Test%3Aone&headers=X-Test%3Aone&delay=0&full_page=false&cache_key=",
             request.Url);
         Assert.DoesNotContain("access_key=", request.Url, StringComparison.Ordinal);
         Assert.DoesNotContain("signature=", request.Url, StringComparison.Ordinal);
@@ -282,7 +282,7 @@ public sealed class ScreenshotScoutClientTests
 
         Assert.Empty(transport.Requests);
         Assert.Equal(
-            "https://api.screenshotscout.com/v1/capture?access_key=query-key&url=https%3A%2F%2Fexample.com%2Fa+path&cookies=a%3D1&cookies=a%3D1&headers=X-Test%3Aone&headers=X-Test%3Aone&delay=0&full_page=false&cache_key=",
+            "https://api.screenshotscout.com/v1/capture?access_key=query-key&url=https%3A%2F%2Fexample.com%2Fa%20path&cookies=a%3D1&cookies=a%3D1&headers=X-Test%3Aone&headers=X-Test%3Aone&delay=0&full_page=false&cache_key=",
             url);
     }
 

@@ -93,15 +93,20 @@ The generated URL contains the access key. When a secret key is configured, the 
 
 ## Signed requests
 
-Pass the API key's secret key as the second constructor argument:
+Pass the API key's secret key as the second constructor argument, and send captures with `CaptureHttpMethod.Get`:
 
 ```csharp
 using var client = new ScreenshotScoutClient(
     "YOUR_ACCESS_KEY",
     "YOUR_SECRET_KEY");
+
+var response = await client.CaptureAsync(
+    "https://example.com",
+    new CaptureOptions { FullPage = true },
+    CaptureHttpMethod.Get);
 ```
 
-The secret is used locally and is never transmitted. The client signs capture requests and generated capture URLs automatically. See the [signed requests guide](https://screenshotscout.com/docs/signed-requests).
+The secret is used locally and is never transmitted. The client signs generated capture URLs and GET requests automatically; POST requests can't be signed. See the [signed requests guide](https://screenshotscout.com/docs/signed-requests).
 
 ## Capture options
 

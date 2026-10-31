@@ -18,4 +18,8 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\ScreenshotScout\ScreenshotScout.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <None Update="Fixtures\signing-vectors.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>
