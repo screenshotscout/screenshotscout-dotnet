@@ -16,9 +16,9 @@ dotnet add package ScreenshotScout
 
 ## Get your API credentials
 
-[Sign up for Screenshot Scout](https://screenshotscout.com/auth/signup) or sign in, then open the [API Keys page](https://screenshotscout.com/app/api-keys). Copy the access key and secret key and store them securely.
+[Sign up for Screenshot Scout](https://screenshotscout.com/auth/signup) or sign in, then open the [API Keys page](https://screenshotscout.com/app/api-keys) and copy the access key. You only need the secret key for [signed requests](#signed-requests).
 
-Pass the required access key to `ScreenshotScoutClient`. The optional secret key enables [signed requests](#signed-requests).
+Set the access key as the `SCREENSHOTSCOUT_ACCESS_KEY` environment variable, or [pass it in code](#pass-the-keys-yourself).
 
 ## Capture a screenshot
 
@@ -27,7 +27,7 @@ Pass the required access key to `ScreenshotScoutClient`. The optional secret key
 ```csharp
 using ScreenshotScout;
 
-using var client = new ScreenshotScoutClient("YOUR_ACCESS_KEY");
+using var client = new ScreenshotScoutClient(); // Reads SCREENSHOTSCOUT_ACCESS_KEY
 
 var response = await client.CaptureAsync(
     "https://example.com",
@@ -42,7 +42,7 @@ await File.WriteAllBytesAsync("screenshot.png", binary.Bytes);
 Console.WriteLine(binary.ScreenshotUrl);
 ```
 
-POST is the default. An omitted `ResponseType`, or `CaptureResponseType.Binary`, returns a `BinaryCaptureResponse`.
+POST is the default, or GET when the client has a secret key. An omitted `ResponseType`, or `CaptureResponseType.Binary`, returns a `BinaryCaptureResponse`.
 
 ## Request a JSON result
 
@@ -64,7 +64,7 @@ if (response is JsonCaptureResponse json)
 
 ## Use GET
 
-POST is used by default. To send a GET request, pass `CaptureHttpMethod.Get`:
+POST is the default, or GET when the client has a secret key. To send a GET request, pass `CaptureHttpMethod.Get`:
 
 ```csharp
 var response = await client.CaptureAsync(
@@ -93,20 +93,29 @@ The generated URL contains the access key. When a secret key is configured, the 
 
 ## Signed requests
 
-Pass the API key's secret key as the second constructor argument, and send captures with `CaptureHttpMethod.Get`:
+Set the API key's secret key as the `SCREENSHOTSCOUT_SECRET_KEY` environment variable. The client then signs its capture requests and the capture URLs it builds, with no change to your code:
 
 ```csharp
-using var client = new ScreenshotScoutClient(
-    "YOUR_ACCESS_KEY",
-    "YOUR_SECRET_KEY");
+using var client = new ScreenshotScoutClient(); // Reads SCREENSHOTSCOUT_ACCESS_KEY and SCREENSHOTSCOUT_SECRET_KEY
 
 var response = await client.CaptureAsync(
     "https://example.com",
-    new CaptureOptions { FullPage = true },
-    CaptureHttpMethod.Get);
+    new CaptureOptions { FullPage = true });
 ```
 
-The secret is used locally and is never transmitted. The client signs generated capture URLs and GET requests automatically; POST requests can't be signed. See the [signed requests guide](https://screenshotscout.com/docs/signed-requests).
+The secret key is used locally and is never transmitted. See the [signed requests guide](https://screenshotscout.com/docs/signed-requests) for details.
+
+## Pass the keys yourself
+
+To use keys from somewhere other than the environment, such as a secrets manager or per-customer settings, pass them to the client:
+
+```csharp
+using var client = new ScreenshotScoutClient(
+    settings.AccessKey,
+    settings.SecretKey); // The secret key is optional
+```
+
+This constructor reads neither environment variable, even when a key you pass is `null`.
 
 ## Capture options
 
@@ -166,11 +175,7 @@ using var httpClient = new HttpClient
     Timeout = TimeSpan.FromMinutes(5),
 };
 using var client = new ScreenshotScoutClient(
-    "YOUR_ACCESS_KEY",
-    options: new ScreenshotScoutClientOptions
-    {
-        HttpClient = httpClient,
-    });
+    new ScreenshotScoutClientOptions { HttpClient = httpClient }); // Reads SCREENSHOTSCOUT_ACCESS_KEY
 ```
 
 An injected `HttpClient` remains caller-owned. `ScreenshotScoutClient` does not modify or dispose it, so its timeout, proxy, and handler settings stay in effect.

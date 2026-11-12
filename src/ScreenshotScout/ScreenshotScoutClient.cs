@@ -11,22 +11,52 @@ namespace ScreenshotScout;
 public sealed partial class ScreenshotScoutClient : IDisposable
 {
     private const string CaptureEndpoint = "https://api.screenshotscout.com/v1/capture";
+    private const string AccessKeyVariable = "SCREENSHOTSCOUT_ACCESS_KEY";
+    private const string SecretKeyVariable = "SCREENSHOTSCOUT_SECRET_KEY";
+    private const string AccessKeyRequiredMessage = "A non-blank Screenshot Scout access key is required.";
 
     [GeneratedRegex("^[A-Za-z0-9\\-._~+/]+=*\\z", RegexOptions.CultureInvariant)]
     private static partial Regex AccessKeyRegex();
 
     private readonly string _accessKey;
     private readonly string? _secretKey;
+    private readonly bool _secretKeyFromEnvironment;
     private readonly AuthenticationHeaderValue _authorizationHeader;
     private readonly HttpClient _httpClient;
     private readonly bool _ownsHttpClient;
     private int _disposed;
 
-    /// <summary>Creates a reusable client with explicit credentials and optional transport configuration.</summary>
+    /// <summary>
+    /// Creates a reusable client with the keys from the <c>SCREENSHOTSCOUT_ACCESS_KEY</c> and
+    /// <c>SCREENSHOTSCOUT_SECRET_KEY</c> environment variables, and optional transport configuration.
+    /// </summary>
+    /// <remarks>
+    /// The client reads both variables once, when it's created. <c>SCREENSHOTSCOUT_ACCESS_KEY</c> is required,
+    /// and an empty variable counts as unset. When <c>SCREENSHOTSCOUT_SECRET_KEY</c> is set, the client signs
+    /// its capture requests and the capture URLs it builds. To pass the keys in code instead, use
+    /// <see cref="ScreenshotScoutClient(string, string?, ScreenshotScoutClientOptions?)"/>, which reads
+    /// neither variable.
+    /// </remarks>
+    /// <param name="options">Optional HTTP transport configuration.</param>
+    /// <exception cref="ScreenshotScoutConfigurationException">
+    /// <c>SCREENSHOTSCOUT_ACCESS_KEY</c> is unset or empty, either variable contains only whitespace,
+    /// the access key cannot be used as a Bearer credential, or the secret key contains invalid Unicode text.
+    /// </exception>
+    public ScreenshotScoutClient(ScreenshotScoutClientOptions? options = null)
+        : this(accessKey: null, secretKey: null, options, Environment.GetEnvironmentVariable)
+    {
+    }
+
+    /// <summary>Creates a reusable client with the keys you pass and optional transport configuration.</summary>
+    /// <remarks>
+    /// This constructor reads neither <c>SCREENSHOTSCOUT_ACCESS_KEY</c> nor <c>SCREENSHOTSCOUT_SECRET_KEY</c>,
+    /// even when a key you pass is <see langword="null"/>.
+    /// </remarks>
     /// <param name="accessKey">The required Screenshot Scout API access key.</param>
     /// <param name="secretKey">
     /// The optional secret key used to sign GET capture requests and generated capture URLs.
-    /// POST requests can't be signed, so a client with a secret key refuses them.
+    /// A client with a secret key sends captures as GET by default and refuses POST,
+    /// because POST requests can't be signed.
     /// </param>
     /// <param name="options">Optional HTTP transport configuration.</param>
     /// <exception cref="ScreenshotScoutConfigurationException">
@@ -37,11 +67,32 @@ public sealed partial class ScreenshotScoutClient : IDisposable
         string accessKey,
         string? secretKey = null,
         ScreenshotScoutClientOptions? options = null)
+        : this(
+            // Passed keys never fall back to the environment, so a null access key is an error here.
+            accessKey ?? throw new ScreenshotScoutConfigurationException(AccessKeyRequiredMessage),
+            secretKey,
+            options,
+            Environment.GetEnvironmentVariable)
     {
+    }
+
+    // Both public constructors end here; tests pass their own getEnvironmentVariable. Keys passed in code
+    // always win: if either one is passed, neither variable is read.
+    internal ScreenshotScoutClient(
+        string? accessKey,
+        string? secretKey,
+        ScreenshotScoutClientOptions? options,
+        Func<string, string?> getEnvironmentVariable)
+    {
+        var keysFromEnvironment = accessKey is null && secretKey is null;
+        if (keysFromEnvironment)
+        {
+            (accessKey, secretKey) = ReadEnvironmentKeys(getEnvironmentVariable);
+        }
+
         if (string.IsNullOrWhiteSpace(accessKey))
         {
-            throw new ScreenshotScoutConfigurationException(
-                "A non-blank Screenshot Scout access key is required.");
+            throw new ScreenshotScoutConfigurationException(AccessKeyRequiredMessage);
         }
 
         if (!AccessKeyRegex().IsMatch(accessKey))
@@ -79,6 +130,7 @@ public sealed partial class ScreenshotScoutClient : IDisposable
 
         _accessKey = accessKey;
         _secretKey = secretKey;
+        _secretKeyFromEnvironment = keysFromEnvironment && secretKey is not null;
         _authorizationHeader = authorizationHeader;
         if (options?.HttpClient is { } injectedHttpClient)
         {
@@ -93,9 +145,9 @@ public sealed partial class ScreenshotScoutClient : IDisposable
     }
 
     /// <summary>
-    /// Sends one POST capture request using Task-based asynchronous I/O and waits
-    /// for the final inline Screenshot Scout response. POST requests can't be signed,
-    /// so a client with a secret key refuses them.
+    /// Sends one capture request using Task-based asynchronous I/O and waits for the final inline
+    /// Screenshot Scout response. The request is sent as POST, or as a signed GET when the client
+    /// has a secret key, because POST requests can't be signed.
     /// </summary>
     /// <param name="url">The absolute URL of the page to capture.</param>
     /// <param name="options">Optional capture settings.</param>
@@ -106,9 +158,6 @@ public sealed partial class ScreenshotScoutClient : IDisposable
     /// A task whose result contains either binary image/PDF data or a JSON capture result,
     /// according to <see cref="CaptureOptions.ResponseType"/>.
     /// </returns>
-    /// <exception cref="ScreenshotScoutConfigurationException">
-    /// The client has a secret key. Send the capture with <see cref="CaptureHttpMethod.Get"/> instead.
-    /// </exception>
     /// <exception cref="ScreenshotScoutSerializationException">
     /// The URL or a capture option cannot be serialized.
     /// </exception>
@@ -128,7 +177,7 @@ public sealed partial class ScreenshotScoutClient : IDisposable
         CaptureOptions? options = null,
         CancellationToken cancellationToken = default)
     {
-        return CaptureAsync(url, options, CaptureHttpMethod.Post, cancellationToken);
+        return CaptureCoreAsync(url, options, method: null, cancellationToken);
     }
 
     /// <summary>
@@ -163,27 +212,40 @@ public sealed partial class ScreenshotScoutClient : IDisposable
     /// <paramref name="cancellationToken"/> is canceled.
     /// </exception>
     /// <exception cref="ObjectDisposedException">The client has been disposed.</exception>
-    public async Task<CaptureResponse> CaptureAsync(
+    public Task<CaptureResponse> CaptureAsync(
         string url,
         CaptureOptions? options,
         CaptureHttpMethod method,
         CancellationToken cancellationToken = default)
+    {
+        return CaptureCoreAsync(url, options, method, cancellationToken);
+    }
+
+    // A null method means the caller didn't choose one.
+    private async Task<CaptureResponse> CaptureCoreAsync(
+        string url,
+        CaptureOptions? options,
+        CaptureHttpMethod? method,
+        CancellationToken cancellationToken)
     {
         ThrowIfDisposed();
         var serialized = CaptureSerializer.Serialize(url, options);
         ValidateMethod(method);
         if (_secretKey is not null && method == CaptureHttpMethod.Post)
         {
+            var source = _secretKeyFromEnvironment ? " from " + SecretKeyVariable : string.Empty;
             throw new ScreenshotScoutConfigurationException(
-                "POST requests can't be signed. This client has a secret key: send this capture with method GET, "
+                $"POST requests can't be signed. This client has a secret key{source}: send this capture with method GET, "
                 + "or use a client without a secret key and an API key that doesn't require signed requests.");
         }
 
+        // Without a method, a client that signs sends GET, because POST requests can't be signed.
+        var requestMethod = method ?? (_secretKey is null ? CaptureHttpMethod.Post : CaptureHttpMethod.Get);
         var expectedKind = GetExpectedResponseKind(options);
         cancellationToken.ThrowIfCancellationRequested();
         var signature = CreateSignature(serialized.Pairs);
 
-        using var request = CreateRequest(serialized, method, signature);
+        using var request = CreateRequest(serialized, requestMethod, signature);
         request.Headers.Authorization = _authorizationHeader;
         HttpResponseMessage? response = null;
         RawResponse rawResponse;
@@ -273,9 +335,40 @@ public sealed partial class ScreenshotScoutClient : IDisposable
         };
     }
 
-    private static void ValidateMethod(CaptureHttpMethod method)
+    private static (string AccessKey, string? SecretKey) ReadEnvironmentKeys(
+        Func<string, string?> getEnvironmentVariable)
     {
-        if (method is not CaptureHttpMethod.Get and not CaptureHttpMethod.Post)
+        var accessKey = ReadEnvironmentVariable(getEnvironmentVariable, AccessKeyVariable);
+        var secretKey = ReadEnvironmentVariable(getEnvironmentVariable, SecretKeyVariable);
+        if (accessKey is null)
+        {
+            throw new ScreenshotScoutConfigurationException(
+                $"A non-blank Screenshot Scout access key is required. Pass one, or set {AccessKeyVariable}.");
+        }
+
+        return (accessKey, secretKey);
+    }
+
+    // An empty variable counts as unset.
+    private static string? ReadEnvironmentVariable(Func<string, string?> getEnvironmentVariable, string name)
+    {
+        var value = getEnvironmentVariable(name);
+        if (string.IsNullOrEmpty(value))
+        {
+            return null;
+        }
+
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            throw new ScreenshotScoutConfigurationException($"{name} is set but blank.");
+        }
+
+        return value;
+    }
+
+    private static void ValidateMethod(CaptureHttpMethod? method)
+    {
+        if (method is not (null or CaptureHttpMethod.Get or CaptureHttpMethod.Post))
         {
             throw new ScreenshotScoutSerializationException(
                 "The capture method must be CaptureHttpMethod.Get or CaptureHttpMethod.Post.",

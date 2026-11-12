@@ -6,14 +6,15 @@ namespace ScreenshotScout.Tests;
 
 public sealed class ResponseAndFailureTests
 {
+    // The "SDK interoperability vector" from Fixtures/signing-vectors.json, captured with SignedCaptureOptions().
+    private const string SignedTargetUrl = "https://example.com/a b?x=1&y=2";
+    private const string ExpectedSignature =
+        "6419f2ac8c0440f1e341b547630606c9dc74dacfbb2df8e122fc9ae26831d893";
+
     [Fact]
     public async Task GetAndGeneratedUrlSigningMatchTheApiAlgorithm()
     {
-        using var transport = new TestTransport((_, _) => Task.FromResult(TestTransport.Response(
-            200,
-            "OK",
-            "application/json",
-            Encoding.UTF8.GetBytes("{}"))));
+        using var transport = JsonTransport();
         using var client = new ScreenshotScoutClient(
             "ak_test",
             "sk_test",
@@ -21,27 +22,18 @@ public sealed class ResponseAndFailureTests
             {
                 HttpClient = transport.Client,
             });
-        const string targetUrl = "https://example.com/a b?x=1&y=2";
-        var options = new CaptureOptions
-        {
-            ResponseType = CaptureResponseType.Json,
-            FullPage = false,
-            Delay = 0,
-            Headers = ["X-Test:one", "X-Test:two"],
-        };
-        const string expectedSignature =
-            "6419f2ac8c0440f1e341b547630606c9dc74dacfbb2df8e122fc9ae26831d893";
+        var options = SignedCaptureOptions();
 
         _ = await client.CaptureAsync(
-            targetUrl,
+            SignedTargetUrl,
             options,
             CaptureHttpMethod.Get,
             TestContext.Current.CancellationToken);
-        var builtUrl = client.BuildCaptureUrl(targetUrl, options);
+        var builtUrl = client.BuildCaptureUrl(SignedTargetUrl, options);
 
         var request = Assert.Single(transport.Requests);
-        Assert.Equal(expectedSignature, QueryValue(request.Url, "signature"));
-        Assert.Equal(expectedSignature, QueryValue(builtUrl, "signature"));
+        Assert.Equal(ExpectedSignature, QueryValue(request.Url, "signature"));
+        Assert.Equal(ExpectedSignature, QueryValue(builtUrl, "signature"));
         Assert.Equal("ak_test", QueryValue(builtUrl, "access_key"));
         Assert.DoesNotContain("sk_test", builtUrl, StringComparison.Ordinal);
         Assert.DoesNotContain("access_key=", request.Url, StringComparison.Ordinal);
@@ -49,7 +41,31 @@ public sealed class ResponseAndFailureTests
     }
 
     [Fact]
-    public async Task ClientWithSecretKeyRefusesPostWithoutCallingTheTransport()
+    public async Task ClientWithSecretKeySendsASignedGetWhenNoMethodIsChosen()
+    {
+        using var transport = JsonTransport();
+        using var client = new ScreenshotScoutClient(
+            "ak_test",
+            "sk_test",
+            new ScreenshotScoutClientOptions
+            {
+                HttpClient = transport.Client,
+            });
+
+        _ = await client.CaptureAsync(
+            SignedTargetUrl,
+            SignedCaptureOptions(),
+            TestContext.Current.CancellationToken);
+
+        var request = Assert.Single(transport.Requests);
+        Assert.Equal("GET", request.Method);
+        Assert.Null(request.ContentType);
+        Assert.Empty(request.Body);
+        Assert.Equal(ExpectedSignature, QueryValue(request.Url, "signature"));
+    }
+
+    [Fact]
+    public async Task ClientWithSecretKeyRefusesAnExplicitPostWithoutCallingTheTransport()
     {
         using var transport = new TestTransport();
         using var client = new ScreenshotScoutClient(
@@ -59,22 +75,70 @@ public sealed class ResponseAndFailureTests
             {
                 HttpClient = transport.Client,
             });
-        const string expectedMessage =
-            "POST requests can't be signed. This client has a secret key: send this capture with method GET, or use a client without a secret key and an API key that doesn't require signed requests.";
 
-        var defaultMethodError = await Assert.ThrowsAsync<ScreenshotScoutConfigurationException>(
-            () => client.CaptureAsync(
-                "https://example.com",
-                cancellationToken: TestContext.Current.CancellationToken));
-        var postError = await Assert.ThrowsAsync<ScreenshotScoutConfigurationException>(
+        var error = await Assert.ThrowsAsync<ScreenshotScoutConfigurationException>(
             () => client.CaptureAsync(
                 "https://example.com",
                 null,
                 CaptureHttpMethod.Post,
                 TestContext.Current.CancellationToken));
 
-        Assert.Equal(expectedMessage, defaultMethodError.Message);
-        Assert.Equal(expectedMessage, postError.Message);
+        Assert.Equal(
+            "POST requests can't be signed. This client has a secret key: send this capture with method GET, or use a client without a secret key and an API key that doesn't require signed requests.",
+            error.Message);
+        Assert.Empty(transport.Requests);
+    }
+
+    [Fact]
+    public async Task ClientWithoutKeysReadsBothVariablesOnceAndUsesTheInjectedHttpClient()
+    {
+        var environment = new TestEnvironment("ak_test", "sk_test");
+        using var transport = JsonTransport();
+        using var client = new ScreenshotScoutClient(
+            null,
+            null,
+            new ScreenshotScoutClientOptions
+            {
+                HttpClient = transport.Client,
+            },
+            environment.GetEnvironmentVariable);
+
+        _ = await client.CaptureAsync(
+            SignedTargetUrl,
+            SignedCaptureOptions(),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(["SCREENSHOTSCOUT_ACCESS_KEY", "SCREENSHOTSCOUT_SECRET_KEY"], environment.ReadNames);
+        var request = Assert.Single(transport.Requests);
+        Assert.Equal("GET", request.Method);
+        Assert.Equal("Bearer ak_test", request.Authorization);
+        Assert.Equal(ExpectedSignature, QueryValue(request.Url, "signature"));
+    }
+
+    [Fact]
+    public async Task ExplicitPostNamesTheVariableTheSecretKeyCameFrom()
+    {
+        var environment = new TestEnvironment("ak_env", "sk_env");
+        using var transport = new TestTransport();
+        using var client = new ScreenshotScoutClient(
+            null,
+            null,
+            new ScreenshotScoutClientOptions
+            {
+                HttpClient = transport.Client,
+            },
+            environment.GetEnvironmentVariable);
+
+        var error = await Assert.ThrowsAsync<ScreenshotScoutConfigurationException>(
+            () => client.CaptureAsync(
+                "https://example.com",
+                null,
+                CaptureHttpMethod.Post,
+                TestContext.Current.CancellationToken));
+
+        Assert.Equal(
+            "POST requests can't be signed. This client has a secret key from SCREENSHOTSCOUT_SECRET_KEY: send this capture with method GET, or use a client without a secret key and an API key that doesn't require signed requests.",
+            error.Message);
         Assert.Empty(transport.Requests);
     }
 
@@ -383,6 +447,26 @@ public sealed class ResponseAndFailureTests
         return new ScreenshotScoutClient(
             "key",
             options: new ScreenshotScoutClientOptions { HttpClient = transport.Client });
+    }
+
+    private static TestTransport JsonTransport()
+    {
+        return new TestTransport((_, _) => Task.FromResult(TestTransport.Response(
+            200,
+            "OK",
+            "application/json",
+            Encoding.UTF8.GetBytes("{}"))));
+    }
+
+    private static CaptureOptions SignedCaptureOptions()
+    {
+        return new CaptureOptions
+        {
+            ResponseType = CaptureResponseType.Json,
+            FullPage = false,
+            Delay = 0,
+            Headers = ["X-Test:one", "X-Test:two"],
+        };
     }
 
     private static string? QueryValue(string url, string name)

@@ -9,11 +9,22 @@ namespace ScreenshotScout.Tests;
 
 public sealed class ScreenshotScoutClientTests
 {
+    private const string AccessKeyRequiredMessage = "A non-blank Screenshot Scout access key is required.";
+    private const string EnvironmentAccessKeyRequiredMessage =
+        "A non-blank Screenshot Scout access key is required. Pass one, or set SCREENSHOTSCOUT_ACCESS_KEY.";
+
+    // The "docs minimal URL" vector from Fixtures/signing-vectors.json.
+    private const string UnsignedEnvironmentUrl =
+        "https://api.screenshotscout.com/v1/capture?access_key=YOUR_ACCESS_KEY&url=https%3A%2F%2Fexample.com%2F";
+    private const string SignedEnvironmentUrl =
+        UnsignedEnvironmentUrl + "&signature=b56c41ea153c60ba222c177cd2a95ce343781d1d28ed8bbdc203a847a99752f4";
+
     [Fact]
     public void ConfigurationValidatesCredentials()
     {
-        Assert.Throws<ScreenshotScoutConfigurationException>(
-            () => new ScreenshotScoutClient(null!));
+        var missingAccessKey = Assert.Throws<ScreenshotScoutConfigurationException>(
+            () => new ScreenshotScoutClient(accessKey: null!));
+        Assert.Equal(AccessKeyRequiredMessage, missingAccessKey.Message);
         Assert.Throws<ScreenshotScoutConfigurationException>(
             () => new ScreenshotScoutClient("   "));
         Assert.Throws<ScreenshotScoutConfigurationException>(
@@ -37,6 +48,56 @@ public sealed class ScreenshotScoutClientTests
             {
                 HttpClient = transport.Client,
             });
+    }
+
+    [Theory]
+    [InlineData(null, null, EnvironmentAccessKeyRequiredMessage)]
+    [InlineData("", null, EnvironmentAccessKeyRequiredMessage)]
+    [InlineData(null, "YOUR_SECRET_KEY", EnvironmentAccessKeyRequiredMessage)]
+    [InlineData(" \t", null, "SCREENSHOTSCOUT_ACCESS_KEY is set but blank.")]
+    [InlineData("YOUR_ACCESS_KEY", "  ", "SCREENSHOTSCOUT_SECRET_KEY is set but blank.")]
+    public void ClientWithoutKeysRejectsMissingOrBlankEnvironmentVariables(
+        string? accessKey,
+        string? secretKey,
+        string expectedMessage)
+    {
+        var environment = new TestEnvironment(accessKey, secretKey);
+
+        var error = Assert.Throws<ScreenshotScoutConfigurationException>(
+            () => new ScreenshotScoutClient(null, null, null, environment.GetEnvironmentVariable));
+
+        Assert.Equal(expectedMessage, error.Message);
+    }
+
+    [Theory]
+    [InlineData(null, UnsignedEnvironmentUrl)]
+    [InlineData("", UnsignedEnvironmentUrl)]
+    [InlineData("YOUR_SECRET_KEY", SignedEnvironmentUrl)]
+    public void ClientWithoutKeysUsesTheEnvironmentVariables(string? secretKey, string expectedUrl)
+    {
+        var environment = new TestEnvironment("YOUR_ACCESS_KEY", secretKey);
+        using var client = new ScreenshotScoutClient(null, null, null, environment.GetEnvironmentVariable);
+
+        Assert.Equal(expectedUrl, client.BuildCaptureUrl("https://example.com/"));
+    }
+
+    [Fact]
+    public void PassedKeysMeanTheEnvironmentIsNeverRead()
+    {
+        var environment = new TestEnvironment("ak_env", "sk_env");
+        using var client = new ScreenshotScoutClient("ak_code", null, null, environment.GetEnvironmentVariable);
+
+        var secretKeyOnly = Assert.Throws<ScreenshotScoutConfigurationException>(
+            () => new ScreenshotScoutClient(null, "sk_code", null, environment.GetEnvironmentVariable));
+        var blankAccessKey = Assert.Throws<ScreenshotScoutConfigurationException>(
+            () => new ScreenshotScoutClient(string.Empty, null, null, environment.GetEnvironmentVariable));
+
+        Assert.Equal(
+            "https://api.screenshotscout.com/v1/capture?access_key=ak_code&url=https%3A%2F%2Fexample.com%2F",
+            client.BuildCaptureUrl("https://example.com/"));
+        Assert.Equal(AccessKeyRequiredMessage, secretKeyOnly.Message);
+        Assert.Equal(AccessKeyRequiredMessage, blankAccessKey.Message);
+        Assert.Empty(environment.ReadNames);
     }
 
     [Fact]

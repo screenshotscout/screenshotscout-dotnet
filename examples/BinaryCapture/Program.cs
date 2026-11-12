@@ -1,12 +1,6 @@
 using ScreenshotScout;
 
-var accessKey = Environment.GetEnvironmentVariable("SCREENSHOTSCOUT_ACCESS_KEY");
-if (string.IsNullOrEmpty(accessKey))
-{
-    throw new InvalidOperationException("Set SCREENSHOTSCOUT_ACCESS_KEY first.");
-}
-
-using var client = new ScreenshotScoutClient(accessKey);
+using var client = new ScreenshotScoutClient(); // Reads SCREENSHOTSCOUT_ACCESS_KEY
 
 var response = await client.CaptureAsync(
     "https://example.com",
