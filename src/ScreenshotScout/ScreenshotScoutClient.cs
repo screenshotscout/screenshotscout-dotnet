@@ -10,9 +10,11 @@ namespace ScreenshotScout;
 /// <summary>A reusable client for the inline Screenshot Scout capture endpoint.</summary>
 public sealed partial class ScreenshotScoutClient : IDisposable
 {
-    private const string CaptureEndpoint = "https://api.screenshotscout.com/v1/capture";
+    private const string DefaultBaseUrl = "https://api.screenshotscout.com";
+    private const string CapturePath = "/v1/capture";
     private const string AccessKeyVariable = "SCREENSHOTSCOUT_ACCESS_KEY";
     private const string SecretKeyVariable = "SCREENSHOTSCOUT_SECRET_KEY";
+    private const string BaseUrlVariable = "SCREENSHOTSCOUT_BASE_URL";
     private const string AccessKeyRequiredMessage = "A non-blank Screenshot Scout access key is required.";
 
     [GeneratedRegex("^[A-Za-z0-9\\-._~+/]+=*\\z", RegexOptions.CultureInvariant)]
@@ -21,6 +23,8 @@ public sealed partial class ScreenshotScoutClient : IDisposable
     private readonly string _accessKey;
     private readonly string? _secretKey;
     private readonly bool _secretKeyFromEnvironment;
+    private readonly string _captureEndpoint;
+    private readonly bool _baseUrlFromEnvironment;
     private readonly AuthenticationHeaderValue _authorizationHeader;
     private readonly HttpClient _httpClient;
     private readonly bool _ownsHttpClient;
@@ -28,29 +32,35 @@ public sealed partial class ScreenshotScoutClient : IDisposable
 
     /// <summary>
     /// Creates a reusable client with the keys from the <c>SCREENSHOTSCOUT_ACCESS_KEY</c> and
-    /// <c>SCREENSHOTSCOUT_SECRET_KEY</c> environment variables, and optional transport configuration.
+    /// <c>SCREENSHOTSCOUT_SECRET_KEY</c> environment variables, and optional base URL and transport configuration.
     /// </summary>
     /// <remarks>
     /// The client reads both variables once, when it's created. <c>SCREENSHOTSCOUT_ACCESS_KEY</c> is required,
     /// and an empty variable counts as unset. When <c>SCREENSHOTSCOUT_SECRET_KEY</c> is set, the client signs
-    /// its capture requests and the capture URLs it builds. To pass the keys in code instead, use
+    /// its capture requests and the capture URLs it builds. When <paramref name="options"/> passes no base URL,
+    /// the client also reads <c>SCREENSHOTSCOUT_BASE_URL</c>. To pass the keys in code instead, use
     /// <see cref="ScreenshotScoutClient(string, string?, ScreenshotScoutClientOptions?)"/>, which reads
     /// neither variable.
     /// </remarks>
-    /// <param name="options">Optional HTTP transport configuration.</param>
+    /// <param name="options">Optional base URL and HTTP transport configuration.</param>
     /// <exception cref="ScreenshotScoutConfigurationException">
-    /// <c>SCREENSHOTSCOUT_ACCESS_KEY</c> is unset or empty, either variable contains only whitespace,
-    /// the access key cannot be used as a Bearer credential, or the secret key contains invalid Unicode text.
+    /// <c>SCREENSHOTSCOUT_ACCESS_KEY</c> is unset or empty, either variable or <c>SCREENSHOTSCOUT_BASE_URL</c>
+    /// contains only whitespace, the access key cannot be used as a Bearer credential, or the secret key
+    /// contains invalid Unicode text.
     /// </exception>
     public ScreenshotScoutClient(ScreenshotScoutClientOptions? options = null)
         : this(accessKey: null, secretKey: null, options, Environment.GetEnvironmentVariable)
     {
     }
 
-    /// <summary>Creates a reusable client with the keys you pass and optional transport configuration.</summary>
+    /// <summary>
+    /// Creates a reusable client with the keys you pass and optional base URL and transport configuration.
+    /// </summary>
     /// <remarks>
     /// This constructor reads neither <c>SCREENSHOTSCOUT_ACCESS_KEY</c> nor <c>SCREENSHOTSCOUT_SECRET_KEY</c>,
     /// even when a key you pass is <see langword="null"/>.
+    /// When <paramref name="options"/> passes no base URL, the client reads <c>SCREENSHOTSCOUT_BASE_URL</c>
+    /// once, when it's created.
     /// </remarks>
     /// <param name="accessKey">The required Screenshot Scout API access key.</param>
     /// <param name="secretKey">
@@ -58,10 +68,11 @@ public sealed partial class ScreenshotScoutClient : IDisposable
     /// A client with a secret key sends captures as GET by default and refuses POST,
     /// because POST requests can't be signed.
     /// </param>
-    /// <param name="options">Optional HTTP transport configuration.</param>
+    /// <param name="options">Optional base URL and HTTP transport configuration.</param>
     /// <exception cref="ScreenshotScoutConfigurationException">
-    /// <paramref name="accessKey"/> is blank or cannot be used as a Bearer credential, or
-    /// <paramref name="secretKey"/> is blank or contains invalid Unicode text.
+    /// <paramref name="accessKey"/> is blank or cannot be used as a Bearer credential,
+    /// <paramref name="secretKey"/> is blank or contains invalid Unicode text, or the client reads
+    /// <c>SCREENSHOTSCOUT_BASE_URL</c> and it contains only whitespace.
     /// </exception>
     public ScreenshotScoutClient(
         string accessKey,
@@ -77,7 +88,8 @@ public sealed partial class ScreenshotScoutClient : IDisposable
     }
 
     // Both public constructors end here; tests pass their own getEnvironmentVariable. Keys passed in code
-    // always win: if either one is passed, neither variable is read.
+    // always win: if either one is passed, neither variable is read. SCREENSHOTSCOUT_BASE_URL is read
+    // whenever the options pass no base URL, whether or not keys were passed.
     internal ScreenshotScoutClient(
         string? accessKey,
         string? secretKey,
@@ -128,9 +140,16 @@ public sealed partial class ScreenshotScoutClient : IDisposable
             }
         }
 
+        // Resolved after the keys are validated, so a key error comes first.
+        var (captureEndpoint, baseUrlFromEnvironment) = ResolveCaptureEndpoint(
+            options?.BaseUrl,
+            getEnvironmentVariable);
+
         _accessKey = accessKey;
         _secretKey = secretKey;
         _secretKeyFromEnvironment = keysFromEnvironment && secretKey is not null;
+        _captureEndpoint = captureEndpoint;
+        _baseUrlFromEnvironment = baseUrlFromEnvironment;
         _authorizationHeader = authorizationHeader;
         if (options?.HttpClient is { } injectedHttpClient)
         {
@@ -245,7 +264,12 @@ public sealed partial class ScreenshotScoutClient : IDisposable
         cancellationToken.ThrowIfCancellationRequested();
         var signature = CreateSignature(serialized.Pairs);
 
-        using var request = CreateRequest(serialized, requestMethod, signature);
+        using var request = CreateRequest(
+            _captureEndpoint,
+            _baseUrlFromEnvironment,
+            serialized,
+            requestMethod,
+            signature);
         request.Headers.Authorization = _authorizationHeader;
         HttpResponseMessage? response = null;
         RawResponse rawResponse;
@@ -265,7 +289,8 @@ public sealed partial class ScreenshotScoutClient : IDisposable
         catch (Exception exception)
         {
             throw new ScreenshotScoutTransportException(
-                "Screenshot Scout request failed before a complete HTTP response body was received.",
+                "Screenshot Scout request failed before a complete HTTP response body was received."
+                + BaseUrlSource(_baseUrlFromEnvironment),
                 exception);
         }
         finally
@@ -310,7 +335,7 @@ public sealed partial class ScreenshotScoutClient : IDisposable
             pairs.Add(new WirePair("signature", signature));
         }
 
-        return CaptureEndpoint + "?" + CaptureSerializer.EncodeQuery(pairs);
+        return _captureEndpoint + "?" + CaptureSerializer.EncodeQuery(pairs);
     }
 
     /// <summary>Releases only transport resources created by this SDK client.</summary>
@@ -349,6 +374,36 @@ public sealed partial class ScreenshotScoutClient : IDisposable
         return (accessKey, secretKey);
     }
 
+    // A base URL in the options wins. Without one, SCREENSHOTSCOUT_BASE_URL is read, and without that the
+    // Screenshot Scout API is used. Null or an empty string counts as no base URL.
+    private static (string CaptureEndpoint, bool FromEnvironment) ResolveCaptureEndpoint(
+        string? baseUrl,
+        Func<string, string?> getEnvironmentVariable)
+    {
+        if (!string.IsNullOrEmpty(baseUrl))
+        {
+            return (AppendCapturePath(baseUrl), false);
+        }
+
+        var environmentBaseUrl = ReadEnvironmentVariable(getEnvironmentVariable, BaseUrlVariable);
+        return environmentBaseUrl is null
+            ? (AppendCapturePath(DefaultBaseUrl), false)
+            : (AppendCapturePath(environmentBaseUrl), true);
+    }
+
+    // The base URL is used as given, never parsed or resolved: only trailing slashes are removed before the
+    // capture path is appended.
+    private static string AppendCapturePath(string baseUrl)
+    {
+        return baseUrl.TrimEnd('/') + CapturePath;
+    }
+
+    // Names the variable, never its value, in failures a base URL from the environment may have caused.
+    private static string BaseUrlSource(bool baseUrlFromEnvironment)
+    {
+        return baseUrlFromEnvironment ? $" The base URL comes from {BaseUrlVariable}." : string.Empty;
+    }
+
     // An empty variable counts as unset.
     private static string? ReadEnvironmentVariable(Func<string, string?> getEnvironmentVariable, string name)
     {
@@ -377,6 +432,8 @@ public sealed partial class ScreenshotScoutClient : IDisposable
     }
 
     private static HttpRequestMessage CreateRequest(
+        string endpoint,
+        bool baseUrlFromEnvironment,
         SerializedCaptureOptions serialized,
         CaptureHttpMethod method,
         string? signature)
@@ -393,11 +450,11 @@ public sealed partial class ScreenshotScoutClient : IDisposable
                     pairs.Add(new WirePair("signature", signature));
                 }
 
-                requestUrl = CaptureEndpoint + "?" + CaptureSerializer.EncodeQuery(pairs);
+                requestUrl = endpoint + "?" + CaptureSerializer.EncodeQuery(pairs);
             }
             else
             {
-                requestUrl = CaptureEndpoint;
+                requestUrl = endpoint;
                 content = new ByteArrayContent(CaptureSerializer.SerializeJsonBody(serialized.Body));
                 content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
             }
@@ -417,7 +474,8 @@ public sealed partial class ScreenshotScoutClient : IDisposable
         catch (Exception exception)
         {
             throw new ScreenshotScoutSerializationException(
-                "The Screenshot Scout HTTP request could not be constructed.",
+                "The Screenshot Scout HTTP request could not be constructed."
+                + BaseUrlSource(baseUrlFromEnvironment),
                 innerException: exception);
         }
     }

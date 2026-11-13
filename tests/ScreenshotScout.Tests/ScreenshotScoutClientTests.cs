@@ -82,7 +82,7 @@ public sealed class ScreenshotScoutClientTests
     }
 
     [Fact]
-    public void PassedKeysMeanTheEnvironmentIsNeverRead()
+    public void PassedKeysMeanTheKeyVariablesAreNeverRead()
     {
         var environment = new TestEnvironment("ak_env", "sk_env");
         using var client = new ScreenshotScoutClient("ak_code", null, null, environment.GetEnvironmentVariable);
@@ -97,7 +97,161 @@ public sealed class ScreenshotScoutClientTests
             client.BuildCaptureUrl("https://example.com/"));
         Assert.Equal(AccessKeyRequiredMessage, secretKeyOnly.Message);
         Assert.Equal(AccessKeyRequiredMessage, blankAccessKey.Message);
+        // Only the client that was created read the base URL variable; the key errors came first.
+        Assert.Equal(["SCREENSHOTSCOUT_BASE_URL"], environment.ReadNames);
+    }
+
+    [Fact]
+    public async Task BaseUrlSendsCapturesAndBuildsUrlsOnThatServer()
+    {
+        using var transport = new TestTransport();
+        using var client = new ScreenshotScoutClient(
+            "ak_test",
+            options: new ScreenshotScoutClientOptions
+            {
+                BaseUrl = "http://localhost:8787/",
+                HttpClient = transport.Client,
+            });
+
+        _ = await client.CaptureAsync(
+            "https://example.com",
+            cancellationToken: TestContext.Current.CancellationToken);
+        _ = await client.CaptureAsync(
+            "https://example.com",
+            null,
+            CaptureHttpMethod.Get,
+            TestContext.Current.CancellationToken);
+
+        Assert.Collection(
+            transport.Requests,
+            post =>
+            {
+                Assert.Equal("POST", post.Method);
+                Assert.Equal("http://localhost:8787/v1/capture", post.Url);
+            },
+            get =>
+            {
+                Assert.Equal("GET", get.Method);
+                Assert.Equal("http://localhost:8787/v1/capture?url=https%3A%2F%2Fexample.com", get.Url);
+            });
+        Assert.Equal(
+            "http://localhost:8787/v1/capture?access_key=ak_test&url=https%3A%2F%2Fexample.com",
+            client.BuildCaptureUrl("https://example.com"));
+    }
+
+    [Theory]
+    [InlineData("http://localhost:8787", "http://localhost:8787/v1/capture")]
+    [InlineData("http://localhost:8787/", "http://localhost:8787/v1/capture")]
+    [InlineData("https://proxy.example.com/screenshotscout//", "https://proxy.example.com/screenshotscout/v1/capture")]
+    [InlineData("https://proxy.example.com/a%20b", "https://proxy.example.com/a%20b/v1/capture")]
+    public void BaseUrlIsUsedAsGivenWithoutTrailingSlashes(string baseUrl, string expectedEndpoint)
+    {
+        using var client = new ScreenshotScoutClient(
+            "key",
+            options: new ScreenshotScoutClientOptions { BaseUrl = baseUrl });
+
+        Assert.Equal(
+            expectedEndpoint + "?access_key=key&url=https%3A%2F%2Fexample.com",
+            client.BuildCaptureUrl("https://example.com"));
+    }
+
+    [Theory]
+    [InlineData(null, null)]
+    [InlineData("", null)]
+    [InlineData(null, "")]
+    [InlineData("", "")]
+    public async Task NoBaseUrlOrAnEmptyOneMeansTheScreenshotScoutApi(string? baseUrl, string? environmentBaseUrl)
+    {
+        var environment = new TestEnvironment(baseUrl: environmentBaseUrl);
+        using var transport = new TestTransport();
+        using var client = new ScreenshotScoutClient(
+            "key",
+            null,
+            new ScreenshotScoutClientOptions
+            {
+                BaseUrl = baseUrl,
+                HttpClient = transport.Client,
+            },
+            environment.GetEnvironmentVariable);
+
+        _ = await client.CaptureAsync(
+            "https://example.com",
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.Equal("https://api.screenshotscout.com/v1/capture", Assert.Single(transport.Requests).Url);
+        Assert.Equal(["SCREENSHOTSCOUT_BASE_URL"], environment.ReadNames);
+    }
+
+    [Theory]
+    [InlineData("ak_code")]
+    [InlineData(null)]
+    public async Task WithoutABaseUrlTheClientReadsTheVariableOnceWhereverTheKeysComeFrom(string? accessKey)
+    {
+        var environment = new TestEnvironment("ak_env", null, "http://localhost:8787");
+        using var transport = new TestTransport();
+        using var client = new ScreenshotScoutClient(
+            accessKey,
+            null,
+            new ScreenshotScoutClientOptions { HttpClient = transport.Client },
+            environment.GetEnvironmentVariable);
+        var readsAtConstruction = environment.ReadNames.ToList();
+
+        _ = await client.CaptureAsync(
+            "https://example.com",
+            cancellationToken: TestContext.Current.CancellationToken);
+        var builtUrl = client.BuildCaptureUrl("https://example.com");
+
+        Assert.Equal("http://localhost:8787/v1/capture", Assert.Single(transport.Requests).Url);
+        Assert.Equal(
+            $"http://localhost:8787/v1/capture?access_key={accessKey ?? "ak_env"}&url=https%3A%2F%2Fexample.com",
+            builtUrl);
+        Assert.Single(readsAtConstruction, name => name == "SCREENSHOTSCOUT_BASE_URL");
+        Assert.Equal(readsAtConstruction, environment.ReadNames);
+    }
+
+    [Fact]
+    public async Task BaseUrlPassedInCodeWinsOverTheVariable()
+    {
+        var environment = new TestEnvironment(baseUrl: "http://localhost:8787");
+        using var transport = new TestTransport();
+        using var client = new ScreenshotScoutClient(
+            "key",
+            null,
+            new ScreenshotScoutClientOptions
+            {
+                BaseUrl = "https://proxy.example.com",
+                HttpClient = transport.Client,
+            },
+            environment.GetEnvironmentVariable);
+
+        _ = await client.CaptureAsync(
+            "https://example.com",
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.Equal("https://proxy.example.com/v1/capture", Assert.Single(transport.Requests).Url);
         Assert.Empty(environment.ReadNames);
+    }
+
+    [Fact]
+    public void BlankBaseUrlVariableIsAnErrorAfterTheKeyErrors()
+    {
+        var environment = new TestEnvironment(baseUrl: " \t");
+
+        var blankBaseUrl = Assert.Throws<ScreenshotScoutConfigurationException>(
+            () => new ScreenshotScoutClient("key", null, null, environment.GetEnvironmentVariable));
+        var missingAccessKey = Assert.Throws<ScreenshotScoutConfigurationException>(
+            () => new ScreenshotScoutClient(null, null, null, environment.GetEnvironmentVariable));
+        var invalidAccessKey = Assert.Throws<ScreenshotScoutConfigurationException>(
+            () => new ScreenshotScoutClient("key with spaces", null, null, environment.GetEnvironmentVariable));
+        using var clientWithBaseUrl = new ScreenshotScoutClient(
+            "key",
+            null,
+            new ScreenshotScoutClientOptions { BaseUrl = "https://proxy.example.com" },
+            environment.GetEnvironmentVariable);
+
+        Assert.Equal("SCREENSHOTSCOUT_BASE_URL is set but blank.", blankBaseUrl.Message);
+        Assert.Equal(EnvironmentAccessKeyRequiredMessage, missingAccessKey.Message);
+        Assert.Equal("The Screenshot Scout access key is not a valid Bearer credential.", invalidAccessKey.Message);
     }
 
     [Fact]

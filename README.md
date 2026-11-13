@@ -117,6 +117,17 @@ using var client = new ScreenshotScoutClient(
 
 This constructor reads neither environment variable, even when a key you pass is `null`.
 
+## Send requests to another server
+
+To send requests to another server, such as your own proxy or a mock server, pass its base URL, or set it as the `SCREENSHOTSCOUT_BASE_URL` environment variable:
+
+```csharp
+using var client = new ScreenshotScoutClient(
+    new ScreenshotScoutClientOptions { BaseUrl = "https://proxy.example.com" }); // Reads SCREENSHOTSCOUT_ACCESS_KEY
+```
+
+The client sends captures to the base URL plus `/v1/capture`, and `BuildCaptureUrl` builds URLs on it. A base URL you pass wins over the variable.
+
 ## Capture options
 
 The target URL is the required first argument. Configure the request with `CaptureOptions`:

@@ -90,7 +90,7 @@ public sealed class ResponseAndFailureTests
     }
 
     [Fact]
-    public async Task ClientWithoutKeysReadsBothVariablesOnceAndUsesTheInjectedHttpClient()
+    public async Task ClientWithoutKeysReadsEachVariableOnceAndUsesTheInjectedHttpClient()
     {
         var environment = new TestEnvironment("ak_test", "sk_test");
         using var transport = JsonTransport();
@@ -108,7 +108,9 @@ public sealed class ResponseAndFailureTests
             SignedCaptureOptions(),
             TestContext.Current.CancellationToken);
 
-        Assert.Equal(["SCREENSHOTSCOUT_ACCESS_KEY", "SCREENSHOTSCOUT_SECRET_KEY"], environment.ReadNames);
+        Assert.Equal(
+            ["SCREENSHOTSCOUT_ACCESS_KEY", "SCREENSHOTSCOUT_SECRET_KEY", "SCREENSHOTSCOUT_BASE_URL"],
+            environment.ReadNames);
         var request = Assert.Single(transport.Requests);
         Assert.Equal("GET", request.Method);
         Assert.Equal("Bearer ak_test", request.Authorization);
@@ -140,6 +142,40 @@ public sealed class ResponseAndFailureTests
             "POST requests can't be signed. This client has a secret key from SCREENSHOTSCOUT_SECRET_KEY: send this capture with method GET, or use a client without a secret key and an API key that doesn't require signed requests.",
             error.Message);
         Assert.Empty(transport.Requests);
+    }
+
+    [Fact]
+    public async Task BaseUrlKeepsItsPathAndLeavesSigningUnchanged()
+    {
+        using var transport = JsonTransport();
+        using var client = new ScreenshotScoutClient(
+            "ak_test",
+            "sk_test",
+            new ScreenshotScoutClientOptions
+            {
+                BaseUrl = "https://proxy.example.com/screenshotscout//",
+                HttpClient = transport.Client,
+            });
+        var options = SignedCaptureOptions();
+
+        _ = await client.CaptureAsync(
+            SignedTargetUrl,
+            options,
+            CaptureHttpMethod.Get,
+            TestContext.Current.CancellationToken);
+        var builtUrl = client.BuildCaptureUrl(SignedTargetUrl, options);
+
+        var request = Assert.Single(transport.Requests);
+        Assert.All(
+            new[] { request.Url, builtUrl },
+            url =>
+            {
+                Assert.StartsWith(
+                    "https://proxy.example.com/screenshotscout/v1/capture?",
+                    url,
+                    StringComparison.Ordinal);
+                Assert.Equal(ExpectedSignature, QueryValue(url, "signature"));
+            });
     }
 
     [Fact]
@@ -391,6 +427,132 @@ public sealed class ResponseAndFailureTests
         var error = await Assert.ThrowsAnyAsync<OperationCanceledException>(() => capture);
         Assert.IsNotType<ScreenshotScoutTransportException>(error);
         Assert.Single(transport.Requests);
+    }
+
+    [Theory]
+    [InlineData(null, "http://localhost:8787", " The base URL comes from SCREENSHOTSCOUT_BASE_URL.")]
+    [InlineData("http://localhost:8787", "http://localhost:8787", "")]
+    [InlineData(null, null, "")]
+    public async Task TransportFailureNamesTheBaseUrlVariableOnlyWhenTheBaseUrlCameFromIt(
+        string? baseUrl,
+        string? environmentBaseUrl,
+        string expectedSource)
+    {
+        var nativeCause = new HttpRequestException("connection refused");
+        var environment = new TestEnvironment(baseUrl: environmentBaseUrl);
+        using var transport = new TestTransport((_, _) => Task.FromException<HttpResponseMessage>(nativeCause));
+        using var client = new ScreenshotScoutClient(
+            "key",
+            null,
+            new ScreenshotScoutClientOptions
+            {
+                BaseUrl = baseUrl,
+                HttpClient = transport.Client,
+            },
+            environment.GetEnvironmentVariable);
+
+        var error = await Assert.ThrowsAsync<ScreenshotScoutTransportException>(
+            () => client.CaptureAsync(
+                "https://example.com",
+                cancellationToken: TestContext.Current.CancellationToken));
+
+        Assert.Equal(
+            "Screenshot Scout request failed before a complete HTTP response body was received." + expectedSource,
+            error.Message);
+        Assert.Same(nativeCause, error.InnerException);
+        Assert.Single(transport.Requests);
+    }
+
+    [Theory]
+    [InlineData(null, "http://localhost:99999", " The base URL comes from SCREENSHOTSCOUT_BASE_URL.")]
+    [InlineData("http://localhost:99999", "http://localhost:8787", "")]
+    public async Task UnparsableBaseUrlFailsWhenTheRequestIsConstructedAndBuiltUrlsUseItAsGiven(
+        string? baseUrl,
+        string? environmentBaseUrl,
+        string expectedSource)
+    {
+        var environment = new TestEnvironment(baseUrl: environmentBaseUrl);
+        using var transport = new TestTransport();
+        using var client = new ScreenshotScoutClient(
+            "key",
+            null,
+            new ScreenshotScoutClientOptions
+            {
+                BaseUrl = baseUrl,
+                HttpClient = transport.Client,
+            },
+            environment.GetEnvironmentVariable);
+
+        var error = await Assert.ThrowsAsync<ScreenshotScoutSerializationException>(
+            () => client.CaptureAsync(
+                "https://example.com",
+                cancellationToken: TestContext.Current.CancellationToken));
+
+        Assert.Equal("The Screenshot Scout HTTP request could not be constructed." + expectedSource, error.Message);
+        Assert.IsType<UriFormatException>(error.InnerException);
+        Assert.Empty(transport.Requests);
+        Assert.Equal(
+            "http://localhost:99999/v1/capture?access_key=key&url=https%3A%2F%2Fexample.com",
+            client.BuildCaptureUrl("https://example.com"));
+    }
+
+    // Neither the injected HttpClient nor the one the client creates has a BaseAddress to resolve it against.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task RelativeBaseUrlFailsAsATransportFailureAndBuiltUrlsUseItAsGiven(bool injectHttpClient)
+    {
+        using var transport = new TestTransport();
+        using var client = new ScreenshotScoutClient(
+            "key",
+            options: new ScreenshotScoutClientOptions
+            {
+                BaseUrl = "not a url",
+                HttpClient = injectHttpClient ? transport.Client : null,
+            });
+
+        var error = await Assert.ThrowsAsync<ScreenshotScoutTransportException>(
+            () => client.CaptureAsync(
+                "https://example.com",
+                cancellationToken: TestContext.Current.CancellationToken));
+
+        Assert.Equal(
+            "Screenshot Scout request failed before a complete HTTP response body was received.",
+            error.Message);
+        Assert.IsType<InvalidOperationException>(error.InnerException);
+        Assert.Empty(transport.Requests);
+        Assert.Equal(
+            "not a url/v1/capture?access_key=key&url=https%3A%2F%2Fexample.com",
+            client.BuildCaptureUrl("https://example.com"));
+    }
+
+    [Fact]
+    public async Task CallerCancellationIsNotWrappedWhenTheBaseUrlComesFromTheVariable()
+    {
+        var environment = new TestEnvironment(baseUrl: "http://localhost:8787");
+        using var transport = new TestTransport(async (_, cancellationToken) =>
+        {
+            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            throw new InvalidOperationException("unreachable");
+        });
+        using var client = new ScreenshotScoutClient(
+            "key",
+            null,
+            new ScreenshotScoutClientOptions { HttpClient = transport.Client },
+            environment.GetEnvironmentVariable);
+
+        using var inFlight = new CancellationTokenSource();
+        var capture = client.CaptureAsync("https://example.com", cancellationToken: inFlight.Token);
+        while (transport.Requests.Count == 0)
+        {
+            await Task.Yield();
+        }
+
+        inFlight.Cancel();
+        var error = await Assert.ThrowsAnyAsync<OperationCanceledException>(() => capture);
+        Assert.IsNotType<ScreenshotScoutTransportException>(error);
+        Assert.DoesNotContain("SCREENSHOTSCOUT_BASE_URL", error.Message, StringComparison.Ordinal);
+        Assert.Equal("http://localhost:8787/v1/capture", Assert.Single(transport.Requests).Url);
     }
 
     [Fact]
