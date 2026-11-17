@@ -6,7 +6,7 @@ namespace ScreenshotScout;
 /// </summary>
 public sealed class CaptureOptions
 {
-    /// <summary>Gets or initializes the screenshot or PDF output format.</summary>
+    /// <summary>Gets or initializes the screenshot, PDF, or Markdown output format.</summary>
     public CaptureFormat? Format { get; init; }
 
     /// <summary>Gets or initializes whether the API returns a binary body or a JSON result.</summary>

@@ -52,7 +52,7 @@ public abstract class CaptureResponse
     public RawResponse RawResponse { get; }
 }
 
-/// <summary>Contains a buffered binary screenshot or PDF response.</summary>
+/// <summary>Contains a buffered binary screenshot, PDF, or Markdown response.</summary>
 public sealed class BinaryCaptureResponse : CaptureResponse
 {
     internal BinaryCaptureResponse(
@@ -60,6 +60,7 @@ public sealed class BinaryCaptureResponse : CaptureResponse
         string? screenshotUrl,
         string? screenshotUrlExpiresAt,
         string? cacheStatus,
+        string? markdown,
         RawResponse rawResponse)
         : base(rawResponse)
     {
@@ -67,9 +68,10 @@ public sealed class BinaryCaptureResponse : CaptureResponse
         ScreenshotUrl = screenshotUrl;
         ScreenshotUrlExpiresAt = screenshotUrlExpiresAt;
         CacheStatus = cacheStatus;
+        Markdown = markdown;
     }
 
-    /// <summary>Gets the exact screenshot or PDF response-body bytes.</summary>
+    /// <summary>Gets the exact screenshot, PDF, or Markdown response-body bytes.</summary>
     /// <remarks>
     /// Treat the returned array as read-only. The same buffered data is also exposed by
     /// <see cref="CaptureResponse.RawResponse"/> through <see cref="RawResponse.Body"/>.
@@ -84,6 +86,11 @@ public sealed class BinaryCaptureResponse : CaptureResponse
 
     /// <summary>Gets the cache status returned by Screenshot Scout, when caching was requested.</summary>
     public string? CacheStatus { get; }
+
+    /// <summary>
+    /// Gets the response body decoded as UTF-8 text, when the response content type is <c>text/markdown</c>.
+    /// </summary>
+    public string? Markdown { get; }
 }
 
 /// <summary>Contains documented JSON result fields and unrecognized fields.</summary>

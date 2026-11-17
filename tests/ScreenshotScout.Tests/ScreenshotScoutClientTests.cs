@@ -547,6 +547,7 @@ public sealed class ScreenshotScoutClientTests
         Assert.Equal("future-format", futureFormat.Value);
         Assert.Equal("future-format", options.Format?.Value);
         Assert.Equal("webp", CaptureFormat.Webp.Value);
+        Assert.Equal("md", CaptureFormat.Md.Value);
         Assert.Equal("json", CaptureResponseType.Json.Value);
 
         Type[] openValueTypes =

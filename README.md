@@ -44,6 +44,23 @@ Console.WriteLine(binary.ScreenshotUrl);
 
 POST is the default, or GET when the client has a secret key. An omitted `ResponseType`, or `CaptureResponseType.Binary`, returns a `BinaryCaptureResponse`.
 
+## Get a page as Markdown
+
+Set `Format` to `CaptureFormat.Md` to get the page as Markdown:
+
+```csharp
+var response = await client.CaptureAsync(
+    "https://example.com",
+    new CaptureOptions { Format = CaptureFormat.Md });
+
+if (response is BinaryCaptureResponse binary)
+{
+    Console.WriteLine(binary.Markdown);
+}
+```
+
+`BinaryCaptureResponse.Markdown` contains the Markdown text, and is `null` for other formats.
+
 ## Request a JSON result
 
 ```csharp
