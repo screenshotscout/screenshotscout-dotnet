@@ -10,6 +10,9 @@ public readonly record struct CaptureFormat(string Value)
     /// <summary>Gets the <c>gif</c> output format.</summary>
     public static CaptureFormat Gif { get; } = new("gif");
 
+    /// <summary>Gets the <c>html</c> output format.</summary>
+    public static CaptureFormat Html { get; } = new("html");
+
     /// <summary>Gets the <c>jpeg</c> alias for the JPEG output format.</summary>
     public static CaptureFormat Jpeg { get; } = new("jpeg");
 
@@ -51,7 +54,7 @@ public readonly record struct CaptureResponseType(string Value)
     /// <summary>Gets the raw service value.</summary>
     public string Value { get; init; } = Value;
 
-    /// <summary>Gets the response type that returns the screenshot, PDF, or Markdown body directly.</summary>
+    /// <summary>Gets the response type that returns the screenshot, PDF, Markdown, or HTML body directly.</summary>
     public static CaptureResponseType Binary { get; } = new("binary");
 
     /// <summary>Gets the response type that returns a JSON result.</summary>

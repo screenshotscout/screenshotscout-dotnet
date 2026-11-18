@@ -174,7 +174,7 @@ public sealed partial class ScreenshotScoutClient : IDisposable
     /// An optional token that cancels the request. Most callers can omit it.
     /// </param>
     /// <returns>
-    /// A task whose result contains either binary image/PDF/Markdown data or a JSON capture result,
+    /// A task whose result contains either binary image/PDF/Markdown/HTML data or a JSON capture result,
     /// according to <see cref="CaptureOptions.ResponseType"/>.
     /// </returns>
     /// <exception cref="ScreenshotScoutSerializationException">
@@ -211,7 +211,7 @@ public sealed partial class ScreenshotScoutClient : IDisposable
     /// An optional token that cancels the request. Most callers can omit it.
     /// </param>
     /// <returns>
-    /// A task whose result contains either binary image/PDF/Markdown data or a JSON capture result,
+    /// A task whose result contains either binary image/PDF/Markdown/HTML data or a JSON capture result,
     /// according to <see cref="CaptureOptions.ResponseType"/>.
     /// </returns>
     /// <exception cref="ScreenshotScoutConfigurationException">
@@ -607,6 +607,7 @@ public sealed partial class ScreenshotScoutClient : IDisposable
             FirstHeader(rawResponse.Headers, "Screenshot-Scout-Screenshot-URL-Expires-At"),
             FirstHeader(rawResponse.Headers, "Screenshot-Scout-Cache-Status"),
             IsMarkdownMediaType(rawResponse.ContentType) ? Encoding.UTF8.GetString(rawResponse.Body) : null,
+            IsHtmlMediaType(rawResponse.ContentType) ? Encoding.UTF8.GetString(rawResponse.Body) : null,
             rawResponse);
     }
 
@@ -720,6 +721,18 @@ public sealed partial class ScreenshotScoutClient : IDisposable
         var separator = contentType.IndexOf(';');
         var mediaType = (separator < 0 ? contentType : contentType[..separator]).Trim();
         return mediaType.Equals("text/markdown", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsHtmlMediaType(string? contentType)
+    {
+        if (contentType is null)
+        {
+            return false;
+        }
+
+        var separator = contentType.IndexOf(';');
+        var mediaType = (separator < 0 ? contentType : contentType[..separator]).Trim();
+        return mediaType.Equals("text/html", StringComparison.OrdinalIgnoreCase);
     }
 
     private static ExpectedResponseKind? GetExpectedResponseKind(CaptureOptions? options)

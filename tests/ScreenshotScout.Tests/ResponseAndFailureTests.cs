@@ -206,6 +206,7 @@ public sealed class ResponseAndFailureTests
         Assert.Equal("2026-07-14T00:00:00Z", response.ScreenshotUrlExpiresAt);
         Assert.Equal("HIT", response.CacheStatus);
         Assert.Null(response.Markdown);
+        Assert.Null(response.Html);
         Assert.Equal(201, response.RawResponse.StatusCode);
         Assert.Equal("Created", response.RawResponse.ReasonPhrase);
         Assert.Equal("image/png", response.RawResponse.ContentType);
@@ -235,6 +236,32 @@ public sealed class ResponseAndFailureTests
             TestContext.Current.CancellationToken));
 
         Assert.Equal(markdown, response.Markdown);
+        Assert.Null(response.Html);
+        Assert.Equal(body, response.Bytes);
+        Assert.Equal(contentType, response.RawResponse.ContentType);
+    }
+
+    [Theory]
+    [InlineData("text/html; charset=utf-8")]
+    [InlineData("TEXT/HTML; charset=UTF-8")]
+    public async Task HtmlResponseRetainsBytesAndDecodesTheText(string contentType)
+    {
+        const string html = "<!DOCTYPE html><html><body><h1>Привет</h1><p>Hello, world.</p></body></html>";
+        var body = Encoding.UTF8.GetBytes(html);
+        using var transport = new TestTransport((_, _) => Task.FromResult(TestTransport.Response(
+            200,
+            "OK",
+            contentType,
+            body)));
+        using var client = CreateClient(transport);
+
+        var response = Assert.IsType<BinaryCaptureResponse>(await client.CaptureAsync(
+            "https://example.com",
+            new CaptureOptions { Format = CaptureFormat.Html },
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(html, response.Html);
+        Assert.Null(response.Markdown);
         Assert.Equal(body, response.Bytes);
         Assert.Equal(contentType, response.RawResponse.ContentType);
     }
