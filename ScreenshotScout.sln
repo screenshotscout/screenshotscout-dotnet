@@ -12,6 +12,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ScreenshotScout.Example.Jso
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ScreenshotScout.Example.BuildCaptureUrl", "examples\BuildCaptureUrl\BuildCaptureUrl.csproj", "{9C2698C1-1AF7-473E-84D3-787858811AFB}"
 EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ScreenshotScout.Example.CaptureFromHtml", "examples\CaptureFromHtml\CaptureFromHtml.csproj", "{C31D7FAB-B90C-46FA-97BD-A5CFD31B6C40}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -38,6 +40,10 @@ Global
 		{9C2698C1-1AF7-473E-84D3-787858811AFB}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{9C2698C1-1AF7-473E-84D3-787858811AFB}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{9C2698C1-1AF7-473E-84D3-787858811AFB}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C31D7FAB-B90C-46FA-97BD-A5CFD31B6C40}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C31D7FAB-B90C-46FA-97BD-A5CFD31B6C40}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C31D7FAB-B90C-46FA-97BD-A5CFD31B6C40}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C31D7FAB-B90C-46FA-97BD-A5CFD31B6C40}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

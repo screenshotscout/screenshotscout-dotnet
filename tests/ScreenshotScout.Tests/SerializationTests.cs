@@ -94,6 +94,30 @@ public sealed class SerializationTests
         Assert.EndsWith("&pdf_scale=0", url, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task PostBodiesKeepHtmlSensitiveAndNonAsciiCharactersAsTheyAre()
+    {
+        using var transport = new TestTransport();
+        using var client = new ScreenshotScoutClient(
+            "key",
+            options: new ScreenshotScoutClientOptions { HttpClient = transport.Client });
+
+        _ = await client.CaptureAsync(
+            "https://example.com/?q=<é&ü>中",
+            new CaptureOptions { InjectJs = ["document.title = 'Zoë & 中文 <ok>';"] },
+            TestContext.Current.CancellationToken);
+        _ = await client.CaptureFromHtmlAsync(
+            "<!doctype html>\n<title>Rechnung für Zoë & \"中文\"</title><p>a < b > c</p>",
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            """{"url":"https://example.com/?q=<é&ü>中","inject_js":["document.title = 'Zoë & 中文 <ok>';"]}""",
+            Encoding.UTF8.GetString(transport.Requests[0].Body));
+        Assert.Equal(
+            """{"html":"<!doctype html>\n<title>Rechnung für Zoë & \"中文\"</title><p>a < b > c</p>"}""",
+            Encoding.UTF8.GetString(transport.Requests[1].Body));
+    }
+
     private static List<JsonElement> ReadSigningVectors()
     {
         var path = Path.Combine(AppContext.BaseDirectory, "Fixtures", "signing-vectors.json");

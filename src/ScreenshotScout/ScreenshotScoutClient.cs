@@ -252,7 +252,7 @@ public sealed partial class ScreenshotScoutClient : IDisposable
         ValidateMethod(method);
         if (_secretKey is not null && method == CaptureHttpMethod.Post)
         {
-            var source = _secretKeyFromEnvironment ? " from " + SecretKeyVariable : string.Empty;
+            var source = SecretKeySource();
             throw new ScreenshotScoutConfigurationException(
                 $"POST requests can't be signed. This client has a secret key{source}: send this capture with method GET, "
                 + "or use a client without a secret key and an API key that doesn't require signed requests.");
@@ -260,6 +260,66 @@ public sealed partial class ScreenshotScoutClient : IDisposable
 
         // Without a method, a client that signs sends GET, because POST requests can't be signed.
         var requestMethod = method ?? (_secretKey is null ? CaptureHttpMethod.Post : CaptureHttpMethod.Get);
+        return await SendCaptureAsync(serialized, requestMethod, options, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Sends one capture request for an HTML document instead of a URL, such as an invoice or a report you
+    /// generated, using Task-based asynchronous I/O, and waits for the final inline Screenshot Scout response.
+    /// The HTML is sent exactly as given, in a POST request. A client with a secret key refuses it,
+    /// because POST requests can't be signed.
+    /// </summary>
+    /// <param name="html">The complete HTML document to capture.</param>
+    /// <param name="options">Optional capture settings.</param>
+    /// <param name="cancellationToken">
+    /// An optional token that cancels the request. Most callers can omit it.
+    /// </param>
+    /// <returns>
+    /// A task whose result contains either binary image/PDF/Markdown/HTML data or a JSON capture result,
+    /// according to <see cref="CaptureOptions.ResponseType"/>.
+    /// </returns>
+    /// <exception cref="ScreenshotScoutConfigurationException">The client has a secret key.</exception>
+    /// <exception cref="ScreenshotScoutSerializationException">
+    /// The HTML or a capture option cannot be serialized.
+    /// </exception>
+    /// <exception cref="ScreenshotScoutTransportException">
+    /// The request fails before a complete HTTP response is received.
+    /// </exception>
+    /// <exception cref="ScreenshotScoutApiException">The API returns a non-success status code.</exception>
+    /// <exception cref="ScreenshotScoutResponseDecodingException">
+    /// A successful response does not match the requested response type or contains invalid JSON.
+    /// </exception>
+    /// <exception cref="OperationCanceledException">
+    /// <paramref name="cancellationToken"/> is canceled.
+    /// </exception>
+    /// <exception cref="ObjectDisposedException">The client has been disposed.</exception>
+    public async Task<CaptureResponse> CaptureFromHtmlAsync(
+        string html,
+        CaptureOptions? options = null,
+        CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        var serialized = CaptureSerializer.SerializeHtml(html, options);
+        if (_secretKey is not null)
+        {
+            var source = SecretKeySource();
+            throw new ScreenshotScoutConfigurationException(
+                "`CaptureFromHtmlAsync` sends the HTML in a POST body, which can't be signed. "
+                + $"This client has a secret key{source}: use a client without a secret key and an API key "
+                + "that doesn't require signed requests.");
+        }
+
+        return await SendCaptureAsync(serialized, CaptureHttpMethod.Post, options, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    // Sends a capture whose method is already settled and decodes the final response.
+    private async Task<CaptureResponse> SendCaptureAsync(
+        SerializedCaptureOptions serialized,
+        CaptureHttpMethod method,
+        CaptureOptions? options,
+        CancellationToken cancellationToken)
+    {
         var expectedKind = GetExpectedResponseKind(options);
         cancellationToken.ThrowIfCancellationRequested();
         var signature = CreateSignature(serialized.Pairs);
@@ -268,7 +328,7 @@ public sealed partial class ScreenshotScoutClient : IDisposable
             _captureEndpoint,
             _baseUrlFromEnvironment,
             serialized,
-            requestMethod,
+            method,
             signature);
         request.Headers.Authorization = _authorizationHeader;
         HttpResponseMessage? response = null;
@@ -402,6 +462,12 @@ public sealed partial class ScreenshotScoutClient : IDisposable
     private static string BaseUrlSource(bool baseUrlFromEnvironment)
     {
         return baseUrlFromEnvironment ? $" The base URL comes from {BaseUrlVariable}." : string.Empty;
+    }
+
+    // Names the variable, never its value, when a refusal is caused by a secret key from the environment.
+    private string SecretKeySource()
+    {
+        return _secretKeyFromEnvironment ? " from " + SecretKeyVariable : string.Empty;
     }
 
     // An empty variable counts as unset.

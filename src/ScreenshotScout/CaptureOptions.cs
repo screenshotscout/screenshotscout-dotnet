@@ -1,7 +1,7 @@
 namespace ScreenshotScout;
 
 /// <summary>
-/// Configures a Screenshot Scout capture. The target URL, credentials, signature,
+/// Configures a Screenshot Scout capture. The target URL or HTML document, credentials, signature,
 /// request method, and cancellation token are supplied separately.
 /// </summary>
 public sealed class CaptureOptions

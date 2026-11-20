@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 
 namespace ScreenshotScout;
@@ -20,11 +21,42 @@ internal sealed class SerializedCaptureOptions
 
 internal static class CaptureSerializer
 {
+    private static readonly CaptureTarget UrlTarget = new(
+        "url",
+        "The capture target URL must be a string.",
+        "The capture target URL must contain valid Unicode text.");
+
+    private static readonly CaptureTarget HtmlTarget = new(
+        "html",
+        "The HTML to capture must be a string.",
+        "The HTML to capture must contain valid Unicode text.");
+
+    // The default options, except that <, >, & and non-ASCII characters are written as they are rather than as
+    // \u escapes, which would make HTML reach the API's body size limit sooner. That's safe because the body goes
+    // to the API and is never put into a web page. A few characters, such as U+00A0, are still escaped.
+    private static readonly JsonSerializerOptions BodyJsonOptions = new(JsonSerializerOptions.Default)
+    {
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+    };
+
     internal static SerializedCaptureOptions Serialize(string targetUrl, CaptureOptions? options)
+    {
+        return Serialize(UrlTarget, targetUrl, options);
+    }
+
+    internal static SerializedCaptureOptions SerializeHtml(string html, CaptureOptions? options)
+    {
+        return Serialize(HtmlTarget, html, options);
+    }
+
+    private static SerializedCaptureOptions Serialize(
+        CaptureTarget target,
+        string targetValue,
+        CaptureOptions? options)
     {
         try
         {
-            return SerializeUnsafe(targetUrl, options);
+            return SerializeUnsafe(target, targetValue, options);
         }
         catch (ScreenshotScoutException)
         {
@@ -42,7 +74,7 @@ internal static class CaptureSerializer
     {
         try
         {
-            return JsonSerializer.SerializeToUtf8Bytes(body);
+            return JsonSerializer.SerializeToUtf8Bytes(body, BodyJsonOptions);
         }
         catch (Exception exception)
         {
@@ -90,21 +122,23 @@ internal static class CaptureSerializer
         return builder.ToString();
     }
 
-    private static SerializedCaptureOptions SerializeUnsafe(string targetUrl, CaptureOptions? options)
+    private static SerializedCaptureOptions SerializeUnsafe(
+        CaptureTarget target,
+        string targetValue,
+        CaptureOptions? options)
     {
-        if (targetUrl is null)
+        if (targetValue is null)
         {
-            throw new ScreenshotScoutSerializationException(
-                "The capture target URL must be a string.",
-                "url");
+            throw new ScreenshotScoutSerializationException(target.NullMessage, target.Name);
         }
 
-        EnsureText(targetUrl, "url", "The capture target URL must contain valid Unicode text.");
+        EnsureText(targetValue, target.Name, target.InvalidTextMessage);
 
-        var pairs = new List<WirePair> { new("url", targetUrl) };
+        // The target comes first, and no option can use its name.
+        var pairs = new List<WirePair> { new(target.Name, targetValue) };
         var body = new Dictionary<string, object>(StringComparer.Ordinal)
         {
-            ["url"] = targetUrl,
+            [target.Name] = targetValue,
         };
         if (options is null)
         {
@@ -231,6 +265,9 @@ internal static class CaptureSerializer
             throw new ScreenshotScoutSerializationException(message, option);
         }
     }
+
+    // What to capture: a page's URL, or an HTML document.
+    private sealed record CaptureTarget(string Name, string NullMessage, string InvalidTextMessage);
 
     private sealed class OptionSerializer
     {
